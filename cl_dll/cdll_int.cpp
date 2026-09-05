@@ -48,9 +48,9 @@ cl_enginefunc_t gEngfuncs;
 CHud gHUD;
 #if USE_VGUI
 TeamFortressViewport *gViewPort = NULL;
+#endif
 
 cvar_t *g_pDeveloper, *g_pCrosshair;
-#endif
 mobile_engfuncs_t *gMobileEngfuncs = NULL;
 
 void InitInput( void );

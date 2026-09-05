@@ -47,7 +47,7 @@ option(USE_NOVGUI_SCOREBOARD "Prefer non-VGUI Scoreboard when USE_VGUI is enable
 option(USE_VOICEMGR "Enable VOICE MANAGER." OFF)
 option(BUILD_CLIENT "Build client dll" ON)
 option(BUILD_SERVER "Build server dll" ON)
-option(USE_STATIC_FREEVGUI "Link freevgui statically into the client so it exports InitVGUISupportAPI (Xash3D FWGS internal VGUI support)" ON)
+option(USE_STATIC_FREEVGUI "Link freevgui statically into the client so it exports InitVGUISupportAPI" ON)
 option(LTO "Enable interprocedural optimization" OFF)
 option(POLLY "Enable pollyhedral optimization" OFF)
 option(ANDROID_APK "Enable APK styled deploy" OFF)

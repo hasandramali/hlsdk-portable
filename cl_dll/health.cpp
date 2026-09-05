@@ -57,6 +57,7 @@ int CHudHealth::Init( void )
 {
 	HOOK_MESSAGE( Health );
 	HOOK_MESSAGE( Damage );
+	m_hud_health_debug = gEngfuncs.pfnRegisterVariable( "hud_health_debug", "0", 0 );
 	m_iHealth = 100;
 	m_fFade = 0;
 	m_iFlags = 0;
@@ -101,7 +102,12 @@ int CHudHealth::MsgFunc_Health( const char *pszName, int iSize, void *pbuf )
 {
 	// TODO: update local health data
 	BEGIN_READ( pbuf, iSize );
-	int x = READ_LONG();
+
+	int x;
+	if( m_hud_health_debug && m_hud_health_debug->value != 0 )
+		x = READ_BYTE();	// Half-Life behavior
+	else
+		x = READ_LONG();	// Sven Coop behavior
 
 	m_iFlags |= HUD_ACTIVE;
 

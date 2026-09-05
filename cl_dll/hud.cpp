@@ -396,6 +396,7 @@ int __MsgFunc_StartSound( const char *pszName, int iSize, void *pbuf )
 	return 0;
 }
 
+#if USE_VGUI
 int __MsgFunc_NextMap( const char *pszName, int iSize, void *pbuf )
 {
 	if( gViewPort )
@@ -414,6 +415,7 @@ int __MsgFunc_TimeEnd( const char *pszName, int iSize, void *pbuf )
 	}
 	return 1;
 }
+#endif
 
 // This is called every time the DLL is loaded
 void CHud::Init( void )
@@ -427,8 +429,10 @@ void CHud::Init( void )
 	HOOK_MESSAGE( SetFOV );
 	HOOK_MESSAGE( Concuss );
 	HOOK_MESSAGE( ClassicMode );
+#if USE_VGUI
 	HOOK_MESSAGE( NextMap );
 	HOOK_MESSAGE( TimeEnd );
+#endif
 
 	HOOK_COMMAND( "npc_moveto", npc_moveto );
 
@@ -487,7 +491,7 @@ void CHud::Init( void )
 	m_pCvarAlphaDefault = CVAR_CREATE("hud_alpha_default", "160", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
 	m_pCvarAlphaMax = CVAR_CREATE("hud_alpha_max", "255", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
 	m_pCvarStealMouse = CVAR_CREATE("hud_capturemouse", "1", FCVAR_ARCHIVE);
-	default_fov = CVAR_CREATE("default_fov", "70", FCVAR_ARCHIVE);
+	default_fov = CVAR_CREATE("default_fov", "90", FCVAR_ARCHIVE);
 	m_pAllowHD = CVAR_CREATE ( "hud_allow_hd", "1", FCVAR_ARCHIVE );
 	cl_lw = gEngfuncs.pfnGetCvarPointer( "cl_lw" );
 	cl_viewbob = CVAR_CREATE( "cl_viewbob", "1", FCVAR_ARCHIVE );
