@@ -34,6 +34,22 @@
 int HUD_IsGame( const char *game );
 int EV_TFC_IsAllyTeam( int iTeam1, int iTeam2 );
 
+static void Scoreboard_StripColorCodes( const char *in, char *out, int outLen )
+{
+	int count = 0;
+	while( *in && count < outLen - 1 )
+	{
+		if( *in == '^' && in[1] >= '0' && in[1] <= '9' )
+		{
+			in += 2;
+			continue;
+		}
+		*out++ = *in++;
+		count++;
+	}
+	*out = '\0';
+}
+
 // Scoreboard dimensions
 #define SBOARD_TITLE_SIZE_Y			YRES(20)
 
@@ -708,7 +724,7 @@ void ScorePanel::FillGrid()
 				else if ( m_iSortedRows[row] == m_iLastKilledBy && m_fLastKillTime && m_fLastKillTime > gHUD.m_flTime )
 				{
 					// Killer's name
-					pLabel->setBgColor( 255,0,0, 255 - ((float)15 * (float)(m_fLastKillTime - gHUD.m_flTime)) );
+					pLabel->setBgColor( 255,5,5, 255 - ((float)15 * (float)(m_fLastKillTime - gHUD.m_flTime)) );
 				}
 			}				
 
@@ -804,7 +820,8 @@ void ScorePanel::FillGrid()
 						}
 					}
 					*/
-					sprintf(sz, "%s", pl_info->name);
+					pLabel->setFgColor(231, 231, 231, 0);
+					Scoreboard_StripColorCodes( pl_info->name, sz, sizeof( sz ) );
 					break;
 				case COLUMN_HEALTH:
 					if (g_IsSpectator[m_iSortedRows[row]])
@@ -821,7 +838,7 @@ void ScorePanel::FillGrid()
 						else if (health <= 0)
 						{
 							sprintf(sz, "DEAD");
-							pLabel->setFgColor(255, 0, 0, 0);
+							pLabel->setFgColor(255, 5, 5, 0);
 						}
 						else if (health > 75)
 						{
@@ -835,12 +852,12 @@ void ScorePanel::FillGrid()
 						}
 						else if (health > 25)
 						{
-							pLabel->setFgColor(255, 128, 0, 0);
+							pLabel->setFgColor(255, 133, 5, 0);
 							sprintf(sz, "%d", health);
 						}
 						else
 						{
-							pLabel->setFgColor(255, 0, 0, 0);
+							pLabel->setFgColor(255, 5, 5, 0);
 							sprintf(sz, "%d", health);
 						}
 					}
@@ -873,21 +890,23 @@ void ScorePanel::FillGrid()
 						}
 						else if (armor > 25)
 						{
-							pLabel->setFgColor(255, 128, 0, 0);
+							pLabel->setFgColor(255, 133, 5, 0);
 							sprintf(sz, "%d", armor);
 						}
 						else
 						{
-							pLabel->setFgColor(255, 0, 0, 0);
+							pLabel->setFgColor(255, 5, 5, 0);
 							sprintf(sz, "%d", armor);
 						}
 					}
 					break;
 
 				case COLUMN_SCORE:
+					pLabel->setFgColor(231, 231, 231, 0);
 					sprintf(sz, "%d", (int)g_PlayerExtraInfo[m_iSortedRows[row]].score);
 					break;
 				case COLUMN_DEATHS:
+					pLabel->setFgColor(231, 231, 231, 0);
 					sprintf(sz, "%d", g_PlayerExtraInfo[m_iSortedRows[row]].deaths);
 					break;
 				case COLUMN_LATENCY:
@@ -895,12 +914,12 @@ void ScorePanel::FillGrid()
 						int ping = g_PlayerInfoList[m_iSortedRows[row]].ping;
 						if (ping >= 400)
 						{
-							pLabel->setFgColor(255, 0, 0, 0);
+							pLabel->setFgColor(255, 5, 5, 0);
 							sprintf(sz, "%d", ping);
 						}
 						else if (ping >= 250)
 						{
-							pLabel->setFgColor(255, 127, 0, 0);
+							pLabel->setFgColor(255, 132, 5, 0);
 							sprintf(sz, "%d", ping);
 						}
 						else if (ping >= 150)
