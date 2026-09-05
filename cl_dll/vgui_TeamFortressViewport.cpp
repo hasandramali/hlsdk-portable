@@ -57,7 +57,8 @@
 #include "shake.h"
 #include "screenfade.h"
 
-void IN_SetVisibleMouse(bool visible);
+#include "input_mouse.h"
+
 void IgnoreNextMouseDelta();
 
 class CCommandMenu;
@@ -143,9 +144,9 @@ const char *sTFClassSelection[] =
 // Get the name of TGA file, based on GameDir
 char *GetVGUITGAName( const char *pszName )
 {
-	int i;
-	char sz[256]; 
-	static char gd[256]; 
+	int i, len;
+	char sz[256];
+	static char gd[256];
 	const char *gamedir;
 
 	if( ScreenWidth < 640 )
@@ -153,10 +154,11 @@ char *GetVGUITGAName( const char *pszName )
 	else
 		i = 640;
 
-	sprintf( sz, pszName, i );
+	safe_snprintf( sz, sizeof( sz ), pszName, i );
 
 	gamedir = gEngfuncs.pfnGetGameDirectory();
-	sprintf( gd, "%s/gfx/vgui/%s.tga", gamedir, sz );
+	len = safe_snprintf( gd, sizeof( gd ), "%s/gfx/vgui/%s.tga", gamedir, sz );
+	if( len < 0 ) return 0;
 
 	return gd;
 }
@@ -1278,7 +1280,7 @@ void TeamFortressViewport::UpdateSpectatorPanel()
 
 
 		// update extra info field
-		char szText[64];
+		char szText[256];
 
 		if( gEngfuncs.IsSpectateOnly() )
 		{
@@ -1652,7 +1654,7 @@ void TeamFortressViewport::UpdateCursorState()
 	// Need cursor if any VGUI window is up
 	if( m_pSpectatorPanel->m_menuVisible || m_pCurrentMenu || m_pTeamMenu->isVisible() || GetClientVoiceMgr()->IsInSquelchMode() )
 	{
-		IN_SetVisibleMouse(true);
+		CurrentMouseInput()->IN_SetVisibleMouse(true);
 		IgnoreNextMouseDelta();
 		App::getInstance()->setCursorOveride( App::getInstance()->getScheme()->getCursor(Scheme::scu_arrow) );
 		return;
@@ -1662,7 +1664,7 @@ void TeamFortressViewport::UpdateCursorState()
 		// commandmenu doesn't have cursor if hud_capturemouse is turned off
 		if( gHUD.m_pCvarStealMouse->value != 0.0f )
 		{
-			IN_SetVisibleMouse(true);
+			CurrentMouseInput()->IN_SetVisibleMouse(true);
 			IgnoreNextMouseDelta();
 			App::getInstance()->setCursorOveride( App::getInstance()->getScheme()->getCursor(Scheme::scu_arrow) );
 			return;
@@ -1670,7 +1672,7 @@ void TeamFortressViewport::UpdateCursorState()
 	}
 
 	App::getInstance()->setCursorOveride( App::getInstance()->getScheme()->getCursor(Scheme::scu_none) );
-	IN_SetVisibleMouse(false);
+	CurrentMouseInput()->IN_SetVisibleMouse(false);
 
 	// Don't reset mouse in demo playback
 	if( !gEngfuncs.pDemoAPI->IsPlayingback() )

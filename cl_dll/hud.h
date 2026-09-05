@@ -120,11 +120,20 @@ public:
 	int DrawWList( float flTime );
 	int MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_AmmoPickup( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_ItemPickup( const char *pszName, int iSize, void *pbuf );
 	int MsgFunc_HideWeapon( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_InvRemove( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_HideHUD( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_TE_CUSTOM( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_WeaponSpr( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_ServerVer( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_MapList( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_ClServerInfo( const char *pszName, int iSize, void *pbuf );
+	int MsgFunc_ClExtrasInfo( const char *pszName, int iSize, void *pbuf );
 
 	void SlotInput( int iSlot );
 	void _cdecl UserCmd_Slot1( void );
@@ -697,6 +706,18 @@ extern int g_iTeamNumber;
 extern int g_iUser1;
 extern int g_iUser2;
 extern int g_iUser3;
+
+// Spectator freelook gate (proedu): g_iAlive is driven by prediction acks
+// (HUD_TxferPredictionData) and can stick at 0 for a health-0 spectator when
+// acks stall, while g_iUser1 (observer mode from the local player's entity
+// updates, HUD_ProcessPlayerState) keeps flowing every frame. Either signal
+// proving spectate status hands the dead player camera control; a truly dead
+// (non-spectating) player keeps stock corpse-cam behavior.
+extern int g_iAlive;
+static inline int CL_Spectating( void )
+{
+	return ( g_iAlive || g_iUser1 != 0 ) ? 1 : 0;
+}
 
 extern cvar_t *g_pDeveloper;
 extern cvar_t *g_pCrosshair;

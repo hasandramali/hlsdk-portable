@@ -20,7 +20,7 @@
 #if !defined(CDLL_DLL_H)
 #define CDLL_DLL_H
 
-#define MAX_WEAPONS		32		// ???
+#define MAX_WEAPONS		64		// Sven Co-op id space (engine MAX_WEAPONS=64; vanilla was 32)
 
 #define MAX_WEAPON_SLOTS		5	// hud item selection slots
 #define MAX_ITEM_TYPES			6	// hud item selection slots
@@ -32,8 +32,8 @@
 #define	HIDEHUD_ALL		( 1<<2 )
 #define HIDEHUD_HEALTH		( 1<<3 )
 
-#define	MAX_AMMO_TYPES		32		// ???
-#define MAX_AMMO_SLOTS		32		// not really slots
+#define	MAX_AMMO_TYPES		256	// Sven reserves ammo 0..255 (AmmoX type byte, CurWeapon longs)
+#define MAX_AMMO_SLOTS		32	// not really slots
 
 #define HUD_PRINTNOTIFY		1
 #define HUD_PRINTCONSOLE	2

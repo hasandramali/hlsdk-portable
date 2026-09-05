@@ -8,6 +8,7 @@
 // Client side entity management functions
 
 #include <memory.h>
+#include <string.h>
 
 #include "hud.h"
 #include "cl_util.h"
@@ -39,13 +40,194 @@ extern "C"
 }
 
 /*
-========================
+=======================
+SporeFx (proedu)
+
+OpFor's CSpore (gearbox/sporegrenade.cpp) attaches ONE persistent
+sprites/glow01.spr to the spore while it flies (kRenderTransAdd, RGB
+180/180/40, renderamt 100, kRenderFxDistort, scale 0.8) and on detonation
+(IgniteThink) throws spore_exp_01/c_01.sprites, tinyspit sprays and a green
+dlight. Sven's server sends none of that, so recreate it client-side:
+
+  - glow: ONE reusable tempent per spore, origin chased every rendered frame
+    and die refreshed to curtime+0.1. Naively allocating a fresh tempent every
+    frame stacks ~6 additive glows at 60fps and blows the sprite out; keeping
+    a single alive tempent reproduces the exact OpFor brightness.
+  - detonate: ONLY when the spore vanishes from the update stream without
+    having popped (removed at detonation), emit the OpFor-style pop (bright
+    green flash + tinyspit debris) at the last known origin. Deliberately NO
+    pop on movement stop: stock Sven/OpFor spores BOUNCE (a bounce frame looks
+    exactly like an impact stop), and popping there detonates on the first
+    bounce instead of at the end of flight.
+=======================
+*/
+
+#define SPORE_MAX_TRACKED	48	// Sven volleys can put many in the air
+#define SPORE_GLOW_RENDERAMT	100
+#define SPORE_GLOW_SCALE		0.8f
+#define SPORE_GLOW_COLOR_R		180
+#define SPORE_GLOW_COLOR_G		180
+#define SPORE_GLOW_COLOR_B		40
+#define SPORE_GLOW_MAX_GAP		0.12f	// if we stall longer, distrust the stored pointer
+#define SPORE_DETONATE_GRACE	0.18f	// seconds unseen before a vanished spore pops
+
+typedef struct sporefx_s
+{
+	int       index;        // cl_entity index; 0 = free slot
+	TEMPENTITY *glow;       // the single live glow tempent (may be freshly re-created)
+	vec3_t    lastOrigin;   // origin of the previous update
+	float     lastSeen;     // GetClientTime() of the last update
+	float     lastRefresh;  // GetClientTime() when the glow tempent was (re)created
+	qboolean  popped;       // detonation effect already emitted for this flight
+} sporefx_t;
+
+static sporefx_t g_sporefx[SPORE_MAX_TRACKED];
+static struct model_s *sporeGlowModel = NULL;
+static int sporeSpitIndex = 0;
+
+static void SporeExplodeFx( const float *origin )
+{
+	float curtime = gEngfuncs.GetClientTime();
+	vec3_t dir;
+	TEMPENTITY *t;
+
+	// green pop flash (stands in for OpFor's spore_exp_01.spr, which Sven's
+	// content doesn't ship)
+	if( sporeGlowModel )
+	{
+		t = gEngfuncs.pEfxAPI->CL_TentEntAllocCustom( (float *)origin, sporeGlowModel, 0, NULL );
+		if( t )
+		{
+			t->entity.curstate.rendermode = kRenderTransAdd;
+			t->entity.curstate.renderamt = 130;
+			t->entity.curstate.rendercolor.r = SPORE_GLOW_COLOR_R;
+			t->entity.curstate.rendercolor.g = SPORE_GLOW_COLOR_G;
+			t->entity.curstate.rendercolor.b = SPORE_GLOW_COLOR_B;
+			t->entity.curstate.renderfx = kRenderFxDistort;
+			t->entity.curstate.scale = 2.4f;
+			t->flags = FTENT_FADEOUT;
+			t->die = curtime + 0.15f;
+		}
+	}
+
+	// debris spray. OpFor aimed at the impact normal; we don't know the
+	// surface normal client-side, so spray outward and slightly up.
+	if( sporeSpitIndex )
+	{
+		dir[0] = gEngfuncs.pfnRandomFloat( -1.0f, 1.0f );
+		dir[1] = gEngfuncs.pfnRandomFloat( -1.0f, 1.0f );
+		dir[2] = 0.6f;
+		gEngfuncs.pEfxAPI->R_Sprite_Spray( (float *)origin, dir, sporeSpitIndex, 28, 300, 45 );
+	}
+}
+
+static void SporeFxUpdate( int entindex, const float *origin )
+{
+	float curtime = gEngfuncs.GetClientTime();
+	sporefx_t *s = NULL;
+	TEMPENTITY *t;
+	int i;
+
+	// find the existing slot for this spore, else grab a free one
+	for( i = 0; i < SPORE_MAX_TRACKED; i++ )
+	{
+		if( g_sporefx[i].index == entindex )
+		{
+			s = &g_sporefx[i];
+			break;
+		}
+	}
+
+	if( !s )
+	{
+		for( i = 0; i < SPORE_MAX_TRACKED; i++ )
+		{
+			if( g_sporefx[i].index == 0 )
+			{
+				s = &g_sporefx[i];
+				break;
+			}
+		}
+		if( !s )
+		{
+			// no room: steal the oldest updated slot
+			s = &g_sporefx[0];
+			for( i = 1; i < SPORE_MAX_TRACKED; i++ )
+				if( g_sporefx[i].lastSeen < s->lastSeen ) s = &g_sporefx[i];
+		}
+		memset( (void *)s, 0, sizeof( *s ));
+		s->index = entindex;
+		s->lastSeen = curtime;
+		VectorCopy( origin, s->lastOrigin );
+		return; // first sighting: glow spawns next frame
+	}
+
+	VectorCopy( origin, s->lastOrigin );
+	s->lastSeen = curtime;
+
+	if( s->popped )
+		return; // detonated: glow dies on its own 0.1s timer
+
+	// single persistent glow, chased to the projectile
+	t = ( s->glow && ( curtime - s->lastRefresh ) < SPORE_GLOW_MAX_GAP ) ? s->glow : NULL;
+	if( !t )
+	{
+		t = gEngfuncs.pEfxAPI->CL_TentEntAllocCustom( (float *)origin, sporeGlowModel, 0, NULL );
+		if( t )
+		{
+			t->entity.curstate.rendermode = kRenderTransAdd;
+			t->entity.curstate.renderamt = SPORE_GLOW_RENDERAMT;
+			t->entity.curstate.rendercolor.r = SPORE_GLOW_COLOR_R;
+			t->entity.curstate.rendercolor.g = SPORE_GLOW_COLOR_G;
+			t->entity.curstate.rendercolor.b = SPORE_GLOW_COLOR_B;
+			t->entity.curstate.renderfx = kRenderFxDistort;
+			t->entity.curstate.scale = SPORE_GLOW_SCALE;
+			t->flags = FTENT_NONE;
+			s->glow = t;
+			s->lastRefresh = curtime;
+		}
+	}
+	if( t )
+	{
+		VectorCopy( origin, t->entity.origin );
+		VectorCopy( origin, t->entity.curstate.origin );
+		t->die = curtime + 0.1f;
+	}
+}
+
+static void SporeFxExpire( void )
+{
+	float curtime = gEngfuncs.GetClientTime();
+	int i;
+
+	for( i = 0; i < SPORE_MAX_TRACKED; i++ )
+	{
+		sporefx_t *s = &g_sporefx[i];
+
+		if( s->index == 0 )
+			continue;
+
+		if( curtime - s->lastSeen <= SPORE_DETONATE_GRACE )
+			continue;
+
+		// gone from the update stream: removed at detonation
+		if( !s->popped )
+			SporeExplodeFx( s->lastOrigin );
+		s->glow = NULL; // tempent died on its own timer; drop the pointer
+		s->index = 0;
+	}
+}
+
+/*
+=======================
 HUD_AddEntity
 	Return 0 to filter entity from visible list for rendering
-========================
+=======================
 */
 int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *modelname )
 {
+	SporeFxExpire(); // expire/detonate tracked spores each frame (cheap, <48 slots)
+
 	switch( type )
 	{
 	case ET_NORMAL:
@@ -55,6 +237,31 @@ int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *mode
 	case ET_FRAGMENTED:
 	default:
 		break;
+	}
+
+	if( type == ET_NORMAL && ent && modelname )
+	{
+		const char *base = modelname;
+		const char *slash = strrchr( modelname, '/' );
+
+		if( slash && slash[1] )
+			base = slash + 1;
+
+		if( !strcmp( base, "spore.mdl" ) )
+		{
+			// Sven's server doesn't attach the OpFor glow01.spr or send any
+			// detonation effect, so drive both client-side here
+			if( !sporeGlowModel )
+			{
+				int unused;
+				sporeGlowModel = gEngfuncs.CL_LoadModel( (char *)"sprites/glow01.spr", &unused );
+			}
+			if( !sporeSpitIndex )
+				sporeSpitIndex = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/tinyspit.spr" );
+
+			if( sporeGlowModel )
+				SporeFxUpdate( ent->index, ent->origin );
+		}
 	}
 	// each frame every entity passes this function, so the overview hooks it to filter the overview entities
 	// in spectator mode:

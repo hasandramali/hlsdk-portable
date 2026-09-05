@@ -41,12 +41,13 @@ project (HLSDK-PORTABLE)
 #--------------
 # USER DEFINES \
 ################\
-option(USE_VGUI "Enable VGUI1." ON)
+option(USE_VGUI "Enable VGUI1 (backed by 3rdparty/freevgui)." ON)
 option(USE_NOVGUI_MOTD "Prefer non-VGUI MOTD when USE_VGUI is enabled" OFF)
 option(USE_NOVGUI_SCOREBOARD "Prefer non-VGUI Scoreboard when USE_VGUI is enabled" OFF)
 option(USE_VOICEMGR "Enable VOICE MANAGER." OFF)
 option(BUILD_CLIENT "Build client dll" ON)
 option(BUILD_SERVER "Build server dll" ON)
+option(USE_STATIC_FREEVGUI "Link freevgui statically into the client so it exports InitVGUISupportAPI" ON)
 option(LTO "Enable interprocedural optimization" OFF)
 option(POLLY "Enable pollyhedral optimization" OFF)
 option(ANDROID_APK "Enable APK styled deploy" OFF)
@@ -202,6 +203,76 @@ if(HAVE_TGMATH_H)
 	int main(){ return (int)(-asin(val) + cos(val2)); }" HAVE_VALID_TGMATH_H )
 	if(${HAVE_VALID_TGMATH_H})
 		add_definitions(-DHAVE_TGMATH_H)
+	endif()
+endif()
+
+if(USE_VGUI)
+	# freevgui is provided by the engine checkout (xash3d-fwgs/3rdparty/freevgui),
+	# not by a submodule of hlsdk-portable. When hlsdk-portable lives inside the
+	# engine tree (<engine>/hlsdk-portable), that is ../3rdparty/freevgui.
+	# Override with -DFREEVGUI_SRC_DIR=... for standalone layouts.
+	set(FREEVGUI_SRC_DIR "${FREEVGUI_SRC_DIR}"
+		CACHE PATH "freevgui source directory (engine's 3rdparty/freevgui)")
+	if(NOT FREEVGUI_SRC_DIR)
+		# nested layout: <engine>/hlsdk-portable -> <engine>/3rdparty/freevgui
+		set(_ENGINE_NESTED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../3rdparty/freevgui")
+		if(EXISTS "${_ENGINE_NESTED_DIR}/CMakeLists.txt")
+			get_filename_component(FREEVGUI_SRC_DIR "${_ENGINE_NESTED_DIR}" ABSOLUTE)
+		elseif(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/freevgui/CMakeLists.txt")
+			# fallback: standalone layout with local copy
+			get_filename_component(FREEVGUI_SRC_DIR "${CMAKE_CURRENT_SOURCE_DIR}/3rdparty/freevgui" ABSOLUTE)
+		else()
+			message(FATAL_ERROR "freevgui not found. Expected engine's 3rdparty/freevgui at ${_ENGINE_NESTED_DIR} "
+				"(hlsdk-portable must live inside the xash3d-fwgs checkout) or set -DFREEVGUI_SRC_DIR=...")
+		endif()
+		unset(_ENGINE_NESTED_DIR)
+	endif()
+	add_subdirectory(${FREEVGUI_SRC_DIR} ${CMAKE_BINARY_DIR}/freevgui)
+
+	if(USE_STATIC_FREEVGUI)
+		# freevgui's static build compiles the Xash3D FWGS support glue
+		# (platform/xash3d-fwgs/*.cpp) which includes engine/vgui_api.h and
+		# common/xash3d_types.h. freevgui/CMakeLists.txt only adds ../engine
+		# (= 3rdparty/engine). For our SDK layout the engine headers live next
+		# to this directory (../engine, ../common under the engine tree), so add
+		# them explicitly. Override with -DXASH3D_ENGINE_RUNTIME_DIR=... if the
+		# engine checkout is elsewhere.
+		set(XASH3D_ENGINE_RUNTIME_DIR "${XASH3D_ENGINE_RUNTIME_DIR}"
+			CACHE PATH "Engine checkout root containing engine/ and common/")
+		if(NOT XASH3D_ENGINE_RUNTIME_DIR)
+			# nested layout: <engine>/hlsdk-portable -> engine root is ..
+			get_filename_component(_ENGINE_CANDIDATE
+				"${CMAKE_CURRENT_SOURCE_DIR}/.." ABSOLUTE)
+			if(EXISTS "${_ENGINE_CANDIDATE}/engine/vgui_api.h"
+				OR EXISTS "${_ENGINE_CANDIDATE}/3rdparty/freevgui/CMakeLists.txt")
+				set(XASH3D_ENGINE_RUNTIME_DIR "${_ENGINE_CANDIDATE}")
+			else()
+				get_filename_component(XASH3D_ENGINE_RUNTIME_DIR
+					"${CMAKE_CURRENT_SOURCE_DIR}/../.." ABSOLUTE)
+			endif()
+			unset(_ENGINE_CANDIDATE)
+		endif()
+		target_include_directories(vgui PRIVATE
+			"${XASH3D_ENGINE_RUNTIME_DIR}/engine"
+			"${XASH3D_ENGINE_RUNTIME_DIR}/common"
+			"${XASH3D_ENGINE_RUNTIME_DIR}/public"
+			"${XASH3D_ENGINE_RUNTIME_DIR}/3rdparty/library_suffix/include")
+	endif()
+
+	# On Android the game libs must keep the "lib" prefix (library-naming.md Issue #4).
+	# freevgui's own CMake strips it on every non-Win32 platform; restore it on Android
+	# so the output (libvgui.so) and the client's DT_NEEDED match the waf-based build.
+	# (Shared build only; the static build produces no vgui.so.)
+	if(ANDROID AND NOT USE_STATIC_FREEVGUI)
+		set_target_properties(vgui PROPERTIES PREFIX "lib")
+	endif()
+
+	if(NOT USE_STATIC_FREEVGUI)
+		# freevgui's CMake provides no install() rule; install it alongside the client
+		# so the client's DT_NEEDED (libvgui.so) is satisfied at runtime.
+		install(TARGETS vgui
+			RUNTIME DESTINATION "${GAMEDIR}/${CLIENT_INSTALL_DIR}/"
+			LIBRARY DESTINATION "${GAMEDIR}/${CLIENT_INSTALL_DIR}/")
 	endif()
 endif()
 

@@ -22,6 +22,7 @@
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "pm_shared.h"
+#include "event_api.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -41,6 +42,12 @@ WeaponsResource gWR;
 
 int g_weaponselect = 0;
 
+// Sven custom-weapon sprite subdirectory table, indexed by weapon id.
+// CustWeapon carries [SHORT id][STRING subdir] (stock MsgFunc_CustWeapon
+// 0x100047d0 stores it at WEAPON+0x1b5); it is NEVER a class name, so it
+// must not enter the weapon inventory — it only selects the sprite set.
+static char s_szCustSprDir[MAX_WEAPONS][64];
+
 void WeaponsResource::LoadAllWeaponSprites( void )
 {
 	for( int i = 0; i < MAX_WEAPONS; i++ )
@@ -52,7 +59,7 @@ void WeaponsResource::LoadAllWeaponSprites( void )
 
 int WeaponsResource::CountAmmo( int iId ) 
 { 
-	if( iId < 0 )
+	if( iId < 0 || iId >= MAX_AMMO_TYPES )
 		return 0;
 
 	return riAmmo[iId];
@@ -91,7 +98,14 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	pWeapon->hAmmo = 0;
 	pWeapon->hAmmo2 = 0;
 
-	sprintf( sz, "sprites/%s.txt", pWeapon->szName );
+	// Stock client.dll LoadWeaponSprites (0x10003d10): when the CustWeapon
+	// subdirectory is present it loads "sprites/<subdir>/<weapon>.txt",
+	// otherwise the plain "sprites/<weapon>.txt". Custom map weapons (e.g.
+	// They Hunger: subdir "hunger/weapons") only exist under their subdir.
+	if( pWeapon->iId > 0 && pWeapon->iId < MAX_WEAPONS && s_szCustSprDir[pWeapon->iId][0] )
+		sprintf( sz, "sprites/%s/%s.txt", s_szCustSprDir[pWeapon->iId], pWeapon->szName );
+	else
+		sprintf( sz, "sprites/%s.txt", pWeapon->szName );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
 
 	if( !pList )
@@ -228,11 +242,20 @@ HSPRITE ghsprBuckets;					// Sprite for top row of weapons menu
 
 DECLARE_MESSAGE( m_Ammo, CurWeapon )	// Current weapon and clip
 DECLARE_MESSAGE( m_Ammo, WeaponList )	// new weapon type
+DECLARE_MESSAGE( m_Ammo, CustWeapon )	// custom weapon sprite subdirectory (NOT a class name)
 DECLARE_MESSAGE( m_Ammo, AmmoX )		// update known ammo type's count
 DECLARE_MESSAGE( m_Ammo, AmmoPickup )	// flashes an ammo pickup record
 DECLARE_MESSAGE( m_Ammo, WeapPickup )    // flashes a weapon pickup record
 DECLARE_MESSAGE( m_Ammo, HideWeapon )	// hides the weapon, ammo, and crosshair displays temporarily
 DECLARE_MESSAGE( m_Ammo, ItemPickup )
+DECLARE_MESSAGE( m_Ammo, InvRemove )	// Sven inventory removal, [LONG id][BYTE]
+DECLARE_MESSAGE( m_Ammo, HideHUD )	// Sven HUD hide flags, LE SHORT (client.so 0xA0026)
+DECLARE_MESSAGE( m_Ammo, TE_CUSTOM )	// Sven custom effect/state, [BYTE type](1/2/3)
+DECLARE_MESSAGE( m_Ammo, WeaponSpr )	// Sven weapon sprite payload, [SHORT id][STRING]
+DECLARE_MESSAGE( m_Ammo, ServerVer )	// Sven server version, [STRING]
+DECLARE_MESSAGE( m_Ammo, MapList )	// Sven map list (wire TBD; consume only)
+DECLARE_MESSAGE( m_Ammo, ClServerInfo )	// Sven server info, [BYTE][LONG][STRING44]
+DECLARE_MESSAGE( m_Ammo, ClExtrasInfo )	// Sven custom HUD table (grammar TBD; consume only)
 
 DECLARE_COMMAND( m_Ammo, Slot1 )
 DECLARE_COMMAND( m_Ammo, Slot2 )
@@ -260,10 +283,19 @@ int CHudAmmo::Init( void )
 
 	HOOK_MESSAGE( CurWeapon );
 	HOOK_MESSAGE( WeaponList );
+	HOOK_MESSAGE( CustWeapon );
 	HOOK_MESSAGE( AmmoPickup );
 	HOOK_MESSAGE( WeapPickup );
 	HOOK_MESSAGE( ItemPickup );
 	HOOK_MESSAGE( HideWeapon );
+	HOOK_MESSAGE( InvRemove );
+	HOOK_MESSAGE( HideHUD );
+	HOOK_MESSAGE( TE_CUSTOM );
+	HOOK_MESSAGE( WeaponSpr );
+	HOOK_MESSAGE( ServerVer );
+	HOOK_MESSAGE( MapList );
+	HOOK_MESSAGE( ClServerInfo );
+	HOOK_MESSAGE( ClExtrasInfo );
 	HOOK_MESSAGE( AmmoX );
 
 	HOOK_COMMAND( "slot1", Slot1 );
@@ -348,6 +380,45 @@ int CHudAmmo::VidInit( void )
 //
 void CHudAmmo::Think( void )
 {
+	// Gauss spin failsafe (proedu): the pulsemachine loop is ONLY legitimate
+	// while +attack2 is held (charging). Any loop with attack2 released is
+	// stale by definition: a missed server stop event, a late spin-restart
+	// arriving after a kill (the unlucky-timing case), or a pierce-shot
+	// leftover where no fire event ever stops it (ricochets stop via their
+	// event path, wall-pierces don't). Watching the local button STATE (not
+	// just the release edge) guarantees the stop: kill whenever attack2 is
+	// not held, for a bounded grace period, and suppress late restarts at
+	// the event itself (see EV_SpinGauss).
+	{
+		static qboolean s_bGaussWasActive = FALSE;
+		static int s_iSpinQuiet = 0;
+		int iButtons = gHUD.m_iKeyBits;
+		qboolean bAttack2Held = ( iButtons & IN_ATTACK2 ) ? TRUE : FALSE;
+		qboolean bGaussActive = ( m_pWeapon && !strcmp( m_pWeapon->szName, "weapon_gauss" )) ? TRUE : FALSE;
+
+		if( bGaussActive && bAttack2Held )
+		{
+			s_bGaussWasActive = TRUE;
+			s_iSpinQuiet = 0;
+		}
+		else if( s_bGaussWasActive )
+		{
+			struct cl_entity_s *pLocal = gEngfuncs.GetLocalPlayer();
+			if( pLocal )
+			{
+				gEngfuncs.pEventAPI->EV_KillEvents( pLocal->index, "events/gaussspin.sc" );
+				gEngfuncs.pEventAPI->EV_StopSound( pLocal->index, CHAN_WEAPON, "ambience/pulsemachine.wav" );
+			}
+			if( ++s_iSpinQuiet > 90 || !bGaussActive )
+			{
+				// 1.5s of kills (or weapon switched away): stand down.
+				// Anything arriving later is suppressed at EV_SpinGauss.
+				s_bGaussWasActive = FALSE;
+				s_iSpinQuiet = 0;
+			}
+		}
+	}
+
 	if( gHUD.m_fPlayerDead )
 		return;
 
@@ -415,6 +486,8 @@ HSPRITE* WeaponsResource::GetAmmoPicFromWeapon( int iAmmoId, wrect_t& rect )
 // Menu Selection Code
 void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 {
+	// Server-driven menus (e.g. /buy) override slot keys entirely, so keep
+	// this branch first: with SelectSlot enabled the menu becomes usable.
 	if( gHUD.m_Menu.m_fMenuDisplayed && ( fAdvance  == FALSE ) && ( iDirection == 1 ) )	
 	{
 		// menu is overriding slot use commands
@@ -434,48 +507,34 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 	if( ! ( gHUD.m_iWeaponBits & ~( 1 << ( WEAPON_SUIT ) ) ) )
 		return;
 
+	// Sven-port fast-switch: a slot key selects IMMEDIATELY and never opens
+	// the top-left weapon sprite menu (full hud_fastswitch effect). The press
+	// still counts: the select sound plays and the weapon is sent to the
+	// server right away. Pressing the same slot again cycles through the
+	// owned weapons in that slot. gpActiveSel stays NULL so DrawWList draws
+	// nothing from the slot path.
 	WEAPON *p = NULL;
-	bool fastSwitch = CVAR_GET_FLOAT( "hud_fastswitch" ) != 0;
 
-	if ( ( gpActiveSel == NULL ) || ( gpActiveSel == (WEAPON *) 1 ) || ( iSlot != gpActiveSel->iSlot ) )
+	if( gpLastSel && gpLastSel != (WEAPON *)1 && gpLastSel->iSlot == iSlot )
 	{
-		PlaySound( "common/wpn_hudon.wav", 1 );
-		p = GetFirstPos( iSlot );
-
-		if ( p && fastSwitch ) // check for fast weapon switch mode
-		{
-			// if fast weapon switch is on, then weapons can be selected in a single keypress
-			// but only if there is only one item in the bucket
-			WEAPON *p2 = GetNextActivePos( p->iSlot, p->iSlotPos );
-			if ( !p2 )
-			{
-				// only one active item in bucket, so change directly to weapon
-				ServerCmd( p->szName );
-				g_weaponselect = p->iId;
-				return;
-			}
-		}
+		PlaySound( "common/wpn_moveselect.wav", 1 );
+		p = GetNextActivePos( iSlot, gpLastSel->iSlotPos );
+		if( !p )
+			p = GetFirstPos( iSlot );
 	}
 	else
 	{
-		PlaySound( "common/wpn_moveselect.wav", 1 );
-		if ( gpActiveSel )
-			p = GetNextActivePos( gpActiveSel->iSlot, gpActiveSel->iSlotPos );
-		if ( !p )
-			p = GetFirstPos( iSlot );
+		PlaySound( "common/wpn_hudon.wav", 1 );
+		p = GetFirstPos( iSlot );
 	}
 
-	
-	if ( !p )  // no selection found
-	{
-		// just display the weapon list, unless fastswitch is on just ignore it
-		if ( !fastSwitch )
-			gpActiveSel = (WEAPON *)1;
-		else
-			gpActiveSel = NULL;
-	}
-	else 
-		gpActiveSel = p;
+	if( !p )  // empty slot: no menu, no selection
+		return;
+
+	ServerCmd( p->szName );
+	g_weaponselect = p->iId;
+	gpLastSel = p;
+	gpActiveSel = NULL;
 }
 
 //------------------------------------------------------------------------
@@ -489,10 +548,22 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
 
+	// Sven server.dll writes [BYTE ammo type][LONG count] (regsize 5); the
+	// stock client reads the count as a signed LONG and stores abs(). Our old
+	// BYTE/BYTE read truncated to the low byte, so modded servers that push
+	// big reserves (e.g. 10000) displayed the low byte (16). Read the full
+	// LONG so values up to 2^31-1 survive into the HUD.
+	if( iSize < 5 )
+		return 0;
 	int iIndex = READ_BYTE();
-	int iCount = READ_BYTE();
+	int iCount = READ_LONG();
 
-	gWR.SetAmmo( iIndex, abs( iCount ) );
+	if( iIndex >= 0 && iIndex < MAX_AMMO_TYPES )
+		gWR.SetAmmo( iIndex, abs( iCount ) );
+
+	// TEMP-DIAG (dual-uzi HUD): confirm the LONG count arrives intact.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0 )
+		gEngfuncs.Con_Printf( "TEMP-DIAG AmmoX idx=%d count=%d\n", iIndex, iCount );
 
 	return 1;
 }
@@ -512,7 +583,7 @@ int CHudAmmo::MsgFunc_AmmoPickup( const char *pszName, int iSize, void *pbuf )
 int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
-	int iIndex = READ_BYTE();
+	int iIndex = READ_SHORT();
 
 	// Add the weapon to the history
 	gHR.AddToHistory( HISTSLOT_WEAP, iIndex );
@@ -555,7 +626,228 @@ int CHudAmmo::MsgFunc_HideWeapon( const char *pszName, int iSize, void *pbuf )
 	return 1;
 }
 
-// 
+//
+// InvRemove -- Sven inventory removal, svc 133 fixed 5: [LONG id][BYTE].
+// Wire layout reverse-verified (client.dll MsgFunc_InvRemove 0x10031be0 ->
+// 0x10061a30 consumes exactly 5 bytes; engine cl_game.c
+// CL_WeaponListFix_OnInvRemovePayload mirrors it). Drop the weapon from the
+// client inventory so removed weapons leave the menu/rotation; a later
+// CurWeapon/WeapPickup re-arms it, so a mis-mapped id self-heals on wield.
+//
+int CHudAmmo::MsgFunc_InvRemove( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	int iId = READ_LONG();
+	READ_BYTE(); // secondary key, consume only
+
+	if( iId > 0 && iId < MAX_WEAPONS )
+	{
+		WEAPON *pWeapon = gWR.GetWeapon( iId );
+		if( pWeapon && pWeapon->iId )
+		{
+			if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+				gEngfuncs.Con_Printf( "TEMP-DIAG InvRemove drops %s (ID %d)\n", pWeapon->szName, iId );
+			gWR.DropWeapon( pWeapon );
+			if( m_pWeapon == pWeapon )
+				m_pWeapon = NULL;
+		}
+	}
+
+	return 1;
+}
+
+//
+// HideHUD -- Sven HUD hide flags, svc 91. client.so reverse (0xA0026):
+// LE SHORT straight into the HUD hide field (+0x88); low-byte bits match
+// the classic HIDEHUD_* layout (0x01 weapons, 0x02 flashlight), upper bits
+// are Sven extras (0x100 crosshair/weapon side). NOT two separate bytes.
+//
+int CHudAmmo::MsgFunc_HideHUD( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	gHUD.m_iHideHUDDisplay = READ_SHORT();
+
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "TEMP-DIAG HideHUD hide=0x%x\n", gHUD.m_iHideHUDDisplay );
+
+	if( gEngfuncs.IsSpectateOnly() )
+		return 1;
+
+	if( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) )
+	{
+		wrect_t nullrc = {0,};
+		gpActiveSel = NULL;
+		SetCrosshair( 0, nullrc, 0, 0, 0 );
+	}
+	else
+	{
+		if( m_pWeapon )
+			SetCrosshair( m_pWeapon->hCrosshair, m_pWeapon->rcCrosshair, 255, 255, 255 );
+	}
+
+	return 1;
+}
+
+// Sven TE_CUSTOM global flag (type 3), client.so 0x1065B6.
+static int s_iSvenTECustomFlag = 0;
+
+//
+// TE_CUSTOM -- Sven custom effect/state message, svc 99. client.so reverse
+// (wrapper 0xD3330 -> core 0x1065B6): first field BYTE type (1/2/3, else
+// "TE_CUSTOM error: unknown type %d"). Type 1 carries two SHORTs into an
+// effect record; type 2 builds a client-side effect object (full wire still
+// open); type 3 is a BYTE flag. This is NOT a vanilla svc_temp_entity.
+//
+int CHudAmmo::MsgFunc_TE_CUSTOM( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	int type = READ_BYTE();
+
+	switch( type )
+	{
+	case 1:
+	{
+		int v1 = READ_SHORT();
+		int v2 = READ_SHORT();
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "TEMP-DIAG TE_CUSTOM type=1 v1=%d v2=%d (effect record TBD)\n", v1, v2 );
+		break;
+	}
+	case 2:
+		// Wire fields feed 0xB542C directly without plain READs; the exact
+		// layout is still open, so consume nothing further here (the engine
+		// already consumed the stream by registered size).
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "TEMP-DIAG TE_CUSTOM type=2 (effect object, wire TBD)\n" );
+		break;
+	case 3:
+	{
+		int value = READ_BYTE();
+		s_iSvenTECustomFlag = ( value == 1 );
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "TEMP-DIAG TE_CUSTOM type=3 flag=%d\n", s_iSvenTECustomFlag );
+		break;
+	}
+	default:
+		gEngfuncs.Con_Printf( "TE_CUSTOM error: unknown type %d\n", type );
+		break;
+	}
+
+	return 1;
+}
+
+// Sven per-weapon sprite payload table, indexed by weapon id. WeaponSpr
+// (client.so 0xA328A) writes [SHORT id][STRING] into rgWeapons[id]+0xB0 and
+// reprocesses the weapon record (0xA2522); CustWeapon (+0x1B5) is the
+// separate sprite-subdirectory context. Stored here for observation; wired
+// into sprite loading once live logs show the payload shape.
+static char s_szWeaponSpr[MAX_WEAPONS][264];
+
+//
+// WeaponSpr -- Sven weapon sprite payload, svc 138: [SHORT id][STRING].
+//
+int CHudAmmo::MsgFunc_WeaponSpr( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	int iId = READ_SHORT();
+	const char *pszSpr = READ_STRING();
+
+	if( iId > 0 && iId < MAX_WEAPONS && pszSpr && pszSpr[0] )
+	{
+		strlcpy( s_szWeaponSpr[iId], pszSpr, sizeof( s_szWeaponSpr[iId] ) );
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "TEMP-DIAG WeaponSpr id=%d spr=%s\n", iId, pszSpr );
+		WEAPON *pWeapon = gWR.GetWeapon( iId );
+		if( pWeapon && pWeapon->iId )
+			gWR.LoadWeaponSprites( pWeapon );
+	}
+
+	return 1;
+}
+
+// Last Sven server version string (ServerVer, svc 124). Stock disconnects
+// on mismatch (client "5.26"); we deliberately never disconnect (Xash is not
+// 5.26) and only record/report it.
+static char s_szSvenServerVer[64];
+
+//
+// ServerVer -- Sven server version, svc 124: [STRING].
+//
+int CHudAmmo::MsgFunc_ServerVer( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	const char *pszVer = READ_STRING();
+	if( pszVer )
+	{
+		strlcpy( s_szSvenServerVer, pszVer, sizeof( s_szSvenServerVer ) );
+		gEngfuncs.Con_Printf( "ServerVer: server reports version %s\n", pszVer );
+	}
+
+	return 1;
+}
+
+//
+// MapList -- Sven map list, svc 102. Wire grammar still open (handler
+// delegates in client.so); consume only, no state yet.
+//
+int CHudAmmo::MsgFunc_MapList( const char *pszName, int iSize, void *pbuf )
+{
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "TEMP-DIAG MapList stub size=%d\n", iSize );
+
+	return 1;
+}
+
+// Sven server info record (ClServerInfo, svc 147):
+// [BYTE][LONG][STRING up to 44]. Real client-side state in stock.
+static struct
+{
+	int b;
+	int l;
+	char s[44];
+} s_svenServerInfo;
+
+//
+// ClServerInfo -- Sven server info, svc 147: [BYTE][LONG][STRING44].
+//
+int CHudAmmo::MsgFunc_ClServerInfo( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	s_svenServerInfo.b = READ_BYTE();
+	s_svenServerInfo.l = READ_LONG();
+	const char *pszInfo = READ_STRING();
+	if( pszInfo )
+		strlcpy( s_svenServerInfo.s, pszInfo, sizeof( s_svenServerInfo.s ) );
+	else
+		s_svenServerInfo.s[0] = '\0';
+
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "TEMP-DIAG ClServerInfo b=%d l=%d s=%s\n",
+			s_svenServerInfo.b, s_svenServerInfo.l, s_svenServerInfo.s );
+
+	return 1;
+}
+
+//
+// ClExtrasInfo -- Sven custom HUD table feed, svc 148. The payload goes
+// through a text/config parser (sscanf 5 values) in stock; the exact grammar
+// needs its own reverse pass, so consume only for now.
+//
+int CHudAmmo::MsgFunc_ClExtrasInfo( const char *pszName, int iSize, void *pbuf )
+{
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "TEMP-DIAG ClExtrasInfo stub size=%d\n", iSize );
+
+	return 1;
+}
+
+//
 //  CurWeapon: Update hud state with the current weapon and clip count. Ammo
 //  counts are updated with AmmoX. Server assures that the Weapon ammo type 
 //  numbers match a real ammo type.
@@ -568,16 +860,24 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	BEGIN_READ( pbuf, iSize );
 
 	int iState = READ_BYTE();
-	int iId = READ_CHAR();
-	int iClip = READ_CHAR();
+	int iId = READ_SHORT();
+	int iClip = READ_LONG();
+	int iAmmo = READ_LONG(); // clip and ammo are sent as LONG by Sven's server, -1 means infinite
 
-	// detect if we're also on target
+	// Match Sven client.dll (0x10002fb0): values below -1 are clamped to 0,
+	// -1 stays -1 (infinite). Vanilla only ever sends 0..255 so both paths are safe.
+	if( iClip < -1 )
+		iClip = 0;
+	if( iAmmo < -1 )
+		iAmmo = 0;
+
+	// detect if we're also on target (vanilla state 2, Sven bit 1)
 	if( iState > 1 )
 	{
 		fOnTarget = TRUE;
 	}
 
-	if( iId < 1 )
+	if( iId < 1 || iId >= MAX_WEAPONS )
 	{
 		SetCrosshair( 0, nullrc, 0, 0, 0 );
 		// Clear out the weapon so we don't keep drawing the last active weapon's ammo. - Solokiller
@@ -602,12 +902,48 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	if( !pWeapon )
 		return 0;
 
-	if( iClip < -1 )
-		pWeapon->iClip = abs( iClip );
-	else
-		pWeapon->iClip = iClip;
+	// client.so has no weapon_shockroach definition (only monster_shockroach/
+	// weapon_shockrifle), so id 28 may never get a WeaponList/name. Stamp the
+	// wire id on first contact so id-keyed rules (diag, iClip2 fallback) work
+	// even for nameless records; name/ammo fields stay untouched for the real
+	// WeaponList to fill later.
+	if( pWeapon->iId == 0 )
+		pWeapon->iId = iId;
 
-	if( iState == 0 )	// we're not the current weapon, so update no more
+	pWeapon->iClip = iClip;
+
+	// NOTE: CurWeapon.iAmmo is deliberately NOT mirrored into the reserve
+	// slot. Reverse + live wire proved it carries the SECONDARY count on
+	// dual-ammo weapons (akimbo second clip, M16 grenades), not the primary
+	// reserve — mirroring poisoned primary displays (akimbo 32/32, grenades
+	// over bullets). Primary reserve comes from AmmoX only. (git history has
+	// the removed mirror if this ever needs revisiting.)
+	// Stock client.dll (MsgFunc_CurWeapon core 0x10002fb0) stores this second
+	// LONG per-weapon at WEAPON+0xa4 for EVERY weapon, so keep the same
+	// stock parity here: iClip2 always mirrors iAmmo (-1 stays n/a). Only
+	// the weapons below ever display it; nothing else reads iClip2.
+	pWeapon->iClip2 = iAmmo;
+
+	// TEMP-DIAG (dual-uzi HUD): while the akimbo second-clip wire source is
+	// being confirmed, dump what the server actually sends for the akimbo so
+	// a single test run settles it. Remove with the iClip2 work.
+	// Sven minigun (id 21) and shockroach (id 28) are included: their visible
+	// counts ride CurWeapon's second LONG, so the dump settles clip/reserve/
+	// iAmmo semantics for both in one run. client.so carries no
+	// weapon_shockroach definition, so id 28 is matched by id as well.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0
+		&& ( strstr( pWeapon->szName, "uziakimbo" ) || iId == 21 || iId == 28
+			|| !strcmp( pWeapon->szName, "weapon_minigun" )
+			|| !strcmp( pWeapon->szName, "weapon_shockroach" )))
+	{
+		gEngfuncs.Con_Printf( "TEMP-DIAG CurWeapon name=%s id=%d state=%d clip=%d iAmmo=%d iClip2=%d ammoT=%d count=%d ammo2T=%d count2=%d\n",
+			pWeapon->szName, iId, iState, iClip, iAmmo, pWeapon->iClip2,
+			pWeapon->iAmmoType, gWR.CountAmmo( pWeapon->iAmmoType ),
+			pWeapon->iAmmo2Type, gWR.CountAmmo( pWeapon->iAmmo2Type ));
+	}
+
+	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
+	if( iState == 0 )
 		return 1;
 
 	m_pWeapon = pWeapon;
@@ -647,31 +983,48 @@ int CHudAmmo::MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf )
 	
 	WEAPON Weapon;
 
-	strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
+strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 
-	Weapon.iAmmoType = (int)READ_CHAR();	
-	
-	Weapon.iMax1 = READ_BYTE();
-	if( Weapon.iMax1 == 255 )
-		Weapon.iMax1 = -1;
+	// Sven Co-op server (server.dll:0x10202560, binary-verified) writes
+	// WeaponList as STRING + BYTE(ammo1 idx) + LONG(ammo1 max) + BYTE(ammo2 idx)
+	// + LONG(ammo2 max) + BYTE(slot) + BYTE(pos) + SHORT(id) + BYTE(flags),
+	// which matches client.dll's reader (0x100046A0). The previous LONG+LONG read
+	// drifted the whole message so real weapon names never matched their ids
+	// and the menu showed auto-generated weapon_<id> fallbacks instead.
+	Weapon.iAmmoType = (int)READ_CHAR();
+	if( Weapon.iAmmoType < 0 )
+		Weapon.iAmmoType += 256; // Sven reads ammo idx as unsigned byte (client.dll 0x100046A0)
 
-	Weapon.iAmmo2Type = READ_CHAR();
-	Weapon.iMax2 = READ_BYTE();
+	Weapon.iMax1 = READ_LONG();
+
+	Weapon.iAmmo2Type = (int)READ_CHAR();
+	if( Weapon.iAmmo2Type < 0 )
+		Weapon.iAmmo2Type += 256;
+	Weapon.iMax2 = READ_LONG();
 	if( Weapon.iMax2 == 255 )
 		Weapon.iMax2 = -1;
 
 	Weapon.iSlot = READ_CHAR();
 	Weapon.iSlotPos = READ_CHAR();
-	Weapon.iId = READ_CHAR();
+
+	Weapon.iId = READ_SHORT();
 	Weapon.iFlags = READ_BYTE();
 	Weapon.iClip = 0;
+	Weapon.iClip2 = -1; // dual-uzi second clip, filled from CurWeapon.iAmmo
 
 	if( Weapon.iId < 0 || Weapon.iId >= MAX_WEAPONS )
 		return 0;
-	if( Weapon.iSlot < 0 || Weapon.iSlot >= MAX_WEAPON_SLOTS + 1 )
-		return 0;
-	if( Weapon.iSlotPos < 0 || Weapon.iSlotPos >= MAX_WEAPON_POSITIONS + 1 )
-		return 0;
+
+	// Sven servers number slots 0..9+ (tall layout) while the vanilla HUD
+	// prints buckets 0..4 (rgSlots has 6 rows). WeaponList must register the
+	// weapon regardless of its slot: rejecting slot 6..9 weapons meant the
+	// minigun (9-1, id 21) and shockroach never entered the inventory, so
+	// their ammo type/max were unknown, the reserve counter stayed at 0 and
+	// the bottom-right HUD read 00. Fold the same way PickupWeapon does.
+	if( Weapon.iSlot < 0 ) Weapon.iSlot = 0;
+	if( Weapon.iSlot >= MAX_WEAPON_SLOTS ) Weapon.iSlot = MAX_WEAPON_SLOTS - 1;
+	if( Weapon.iSlotPos < 0 ) Weapon.iSlotPos = 0;
+	if( Weapon.iSlotPos >= MAX_WEAPON_POSITIONS ) Weapon.iSlotPos = MAX_WEAPON_POSITIONS - 1;
 	if( Weapon.iAmmoType < -1 || Weapon.iAmmoType >= MAX_AMMO_TYPES )
 		return 0;
 	if( Weapon.iAmmo2Type < -1 || Weapon.iAmmo2Type >= MAX_AMMO_TYPES )
@@ -682,6 +1035,33 @@ int CHudAmmo::MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf )
 		return 0;*/
 
 	gWR.AddWeapon( &Weapon );
+
+	// TEMP-DIAG (minigun reserve): confirm the ammo types WeaponList carries
+	// for id 21 so the reserve misses are traceable against the widen-to-256.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0 )
+	{
+		gEngfuncs.Con_Printf( "TEMP-DIAG WeaponList name=%s id=%d ammoT=%d max1=%d ammo2T=%d max2=%d\n",
+			Weapon.szName, Weapon.iId, Weapon.iAmmoType, Weapon.iMax1,
+			Weapon.iAmmo2Type, Weapon.iMax2 );
+	}
+
+	return 1;
+}
+
+//
+// CustWeapon -- custom weapon sprite subdirectory, [SHORT id][STRING dir].
+// Stock stores it at WEAPON+0x1b5 for LoadWeaponSprites ("sprites/<dir>/
+// <weapon>.txt"). It is not a selectable name: ignore empty dirs and never
+// let it near the weapon inventory.
+//
+int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+	int iId = READ_SHORT();
+	const char *pszDir = READ_STRING();
+
+	if( iId > 0 && iId < MAX_WEAPONS && pszDir && pszDir[0] )
+		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
 
 	return 1;
 }
@@ -895,9 +1275,60 @@ int CHudAmmo::Draw( float flTime )
 	y += gHUD.m_iHudNumbersYOffset; // a1ba: fix HL25 HUD vertical inconsistensy
 
 	// Does weapon have any ammo at all?
-	if( m_pWeapon->iAmmoType > 0 )
+	// NOTE: Sven numbers ammo types from 0 (binary-verified: the real client
+	// stores the raw BYTE index with no gate), so index 0 is a real type.
+	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
+	if( !strcmp( m_pWeapon->szName, "weapon_uziakimbo" ) && m_pWeapon->iClip2 >= 0 )
+	{
+		// Dual uzis (Sven-style): one compact row right-aligned, clip1 | clip2 
+		// followed by the reserve, e.g. "32 | 32 / 150". Both clips come from
+		// the server's CurWeapon fields (iClip / iAmmo), reserve from iAmmoType.
+		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
+		int iBarWidth = AmmoWidth / 10;
+		int iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
+		int digits1 = 1, digits2 = 1;
+		float fRight;
+
+		for( int n = Q_max( pw->iClip, 0 ); n >= 10; n /= 10 ) digits1++;
+		for( int n = m_pWeapon->iClip2; n >= 10; n /= 10 ) digits2++;
+
+		// Reserve (3 digits) + icon, right-anchored same as the single-clip row
+		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
+		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
+
+		// clip2 | just left of the reserve
+		x -= AmmoWidth / 2 + iBarWidth;
+		UnpackRGB( r, g, b, RGB_BLUEISH );
+		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+		ScaleColors( r, g, b, a );
+		fRight = x - AmmoWidth / 2;
+		gHUD.DrawHudNumber( (int)fRight - digits2 * AmmoWidth, y, iFlags, m_pWeapon->iClip2, r, g, b );
+
+		// clip1 | just left of clip2
+		x = (int)fRight - digits2 * AmmoWidth - AmmoWidth / 2 - iBarWidth;
+		UnpackRGB( r, g, b, RGB_BLUEISH );
+		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+		ScaleColors( r, g, b, a );
+		fRight = x - AmmoWidth / 2;
+		gHUD.DrawHudNumber( (int)fRight - digits1 * AmmoWidth, y, iFlags, pw->iClip, r, g, b );
+	}
+	else if( m_pWeapon->iAmmoType >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
+
+		// Sven minigun/shockroach carry their visible count in CurWeapon's
+		// second LONG (stock stores it per-weapon at WEAPON+0xa4; AmmoX never
+		// carries those types), so a zero AmmoX reserve means "wire silent",
+		// not "empty": fall back to iClip2 instead of showing 00. Scoped to
+		// these two names like the akimbo rule above; everything else keeps
+		// the AmmoX reserve untouched.
+		int iReserve = gWR.CountAmmo( pw->iAmmoType );
+		// client.so has no weapon_shockroach definition, so match id 28 too.
+		if( iReserve == 0 && pw->iClip2 > 0
+			&& ( !strcmp( pw->szName, "weapon_minigun" ) || !strcmp( pw->szName, "weapon_shockroach" )
+				|| pw->iId == 21 || pw->iId == 28 ))
+			iReserve = pw->iClip2;
 
 		if( pw->iClip >= 0 )
 		{
@@ -924,13 +1355,13 @@ int CHudAmmo::Draw( float flTime )
 
 			// GL Seems to need this
 			ScaleColors( r, g, b, a );
-			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
+			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, iReserve, r, g, b );
 		}
 		else
 		{
 			// SPR_Draw a bullets only line
 			x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
-			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
+			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, iReserve, r, g, b );
 		}
 
 		// Draw the ammo Icon
@@ -939,7 +1370,7 @@ int CHudAmmo::Draw( float flTime )
 	}
 
 	// Does weapon have seconday ammo?
-	if( pw->iAmmo2Type > 0 )
+	if( pw->iAmmo2Type >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo2.right - m_pWeapon->rcAmmo2.left;
 

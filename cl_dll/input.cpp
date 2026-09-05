@@ -14,6 +14,7 @@
 
 #include "hud.h"
 #include "cl_util.h"
+#include "cl_entity.h"
 #include "camera.h"
 extern "C"
 {
@@ -859,6 +860,25 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 
 		// Allow mice and other controllers to add their inputs
 		IN_Move( frametime, cmd );
+
+		// TEMP-DIAG (spectator free-roam): 1 Hz dump of the spectate signals
+		// and the outgoing command so a single roam session settles whether
+		// the freeze is missing signals (g_iUser1/g_iAlive stuck 0) or a
+		// zeroed wire cmd. Remove once roam is confirmed working.
+		{
+			static float s_fSpecDiagNext = 0.0f;
+			float now = gEngfuncs.GetClientTime();
+			if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f && now >= s_fSpecDiagNext )
+			{
+				s_fSpecDiagNext = now + 1.0f;
+				struct cl_entity_s *pl = gEngfuncs.GetLocalPlayer();
+				gEngfuncs.Con_Printf( "TEMP-DIAG SpecMove u1=%d u2=%d alive=%d hp=%d dead=%d fwd=%.0f side=%.0f up=%.0f ang=%.0f/%.0f/%.0f btn=%d local=%d\n",
+					g_iUser1, g_iUser2, g_iAlive, gHUD.m_Health.m_iHealth, (gHUD.m_Health.m_iHealth <= 0),
+					cmd->forwardmove, cmd->sidemove, cmd->upmove,
+					cmd->viewangles[0], cmd->viewangles[1], cmd->viewangles[2],
+					cmd->buttons, pl ? pl->index : -1 );
+			}
+		}
 	}
 
 	cmd->impulse = in_impulse;
@@ -892,8 +912,10 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 
 	gEngfuncs.GetViewAngles( (float *)viewangles );
 	// Set current view angles.
-
-	if( g_iAlive )
+	// A health-0 spectator (g_iUser1 observer mode) must keep sending live
+	// angles or the server observer never turns/moves; only a truly dead
+	// (non-spectating) player keeps the frozen death-cam angles.
+	if( CL_Spectating() )
 	{
 		VectorCopy( viewangles, cmd->viewangles );
 		VectorCopy( viewangles, oldangles );

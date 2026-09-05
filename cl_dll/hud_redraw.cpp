@@ -415,6 +415,28 @@ int CHud::DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, in
 	
 	if( iNumber > 0 )
 	{
+		// Sven/modded servers can exceed 999 (big reserves, boosted health):
+		// draw the thousands group first instead of feeding k>=10 into the
+		// sprite index (which drew nothing). Falls through to hundreds below.
+		if( iNumber >= 1000 )
+		{
+			int hi = iNumber / 1000;
+			int div = 1, tmp = hi;
+			while( tmp >= 10 )
+			{
+				tmp /= 10;
+				div *= 10;
+			}
+			while( div > 0 )
+			{
+				DrawSprite( x, y, GetSprite( m_HUD_number_0 + ( hi / div ) % 10 ), &GetSpriteRect( m_HUD_number_0 + ( hi / div ) % 10 ), r, g, b, 0, SPR_ADDITIVE );
+				x += iWidth;
+				hi %= div;
+				div /= 10;
+			}
+			iNumber %= 1000;
+		}
+
 		// SPR_Draw 100's
 		if( iNumber >= 100 )
 		{
@@ -471,11 +493,18 @@ int CHud::DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, in
 
 int CHud::GetNumWidth( int iNumber, int iFlags )
 {
+	// Wider values grow past the flag width (Sven/modded reserves, boosted
+	// health); smaller values keep their exact legacy widths below.
 	if( iFlags & ( DHN_3DIGITS ) )
-		return 3;
-
-	if( iFlags & ( DHN_2DIGITS ) )
-		return 2;
+	{
+		if( iNumber < 1000 )
+			return 3;
+	}
+	else if( iFlags & ( DHN_2DIGITS ) )
+	{
+		if( iNumber < 100 )
+			return 2;
+	}
 
 	if( iNumber <= 0 )
 	{
@@ -491,7 +520,15 @@ int CHud::GetNumWidth( int iNumber, int iFlags )
 	if( iNumber < 100 )
 		return 2;
 
-	return 3;
+	{
+		int digits = 0, v = iNumber;
+		while( v > 0 )
+		{
+			digits++;
+			v /= 10;
+		}
+		return digits;
+	}
 }	
 
 int CHud::GetDefaultAlpha()

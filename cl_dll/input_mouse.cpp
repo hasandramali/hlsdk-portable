@@ -92,6 +92,18 @@ void IgnoreNextMouseDelta()
 	currentInput->IgnoreNextMouseDelta();
 }
 
+#if !SUPPORT_GOLDSOURCE_INPUT
+// XASH3D FWGS builds have no GoldSource-style relative mouse capture and no
+// separate OS cursor: cursor visibility is driven by the engine through the
+// VGUI cursor override (freevgui's XashSurface::setCursor -> CursorSelect),
+// see TeamFortressViewport::UpdateCursorState. Keep the entry point so the
+// GoldSource-era VGUI code links, as a no-op.
+void IN_SetVisibleMouse( bool visible )
+{
+	(void)visible;
+}
+#endif
+
 AbstractInput* CurrentMouseInput()
 {
 	return currentInput;

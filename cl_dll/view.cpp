@@ -76,6 +76,7 @@ extern cvar_t	*chase_active;
 extern cvar_t	*scr_ofsx, *scr_ofsy, *scr_ofsz;
 extern cvar_t	*cl_vsmoothing;
 extern cvar_t	*cl_viewbob;
+extern cvar_t	*cl_rollangle;
 extern Vector   dead_viewangles;
 
 #define	CAM_MODE_RELAX		1
@@ -103,6 +104,7 @@ cvar_t	*cl_bob;
 cvar_t	*cl_bobup;
 cvar_t	*cl_waterdist;
 cvar_t	*cl_chasedist;
+cvar_t	*cl_rollangle;
 
 // These cvars are not registered (so users can't cheat), so set the ->value field directly
 // Register these cvars in V_Init() if needed for easy tweaking
@@ -333,6 +335,8 @@ void V_CalcViewRoll( struct ref_params_s *pparams )
 		return;
 
 	side = V_CalcRoll( viewentity->angles, pparams->simvel, pparams->movevars->rollangle, pparams->movevars->rollspeed );
+
+	side *= cl_rollangle ? cl_rollangle->value : 0.0f;
 
 	pparams->viewangles[ROLL] += side;
 
@@ -736,16 +740,17 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// Apply this at all times
 	{
-		float pitch = pparams->viewangles[0];
+		// Sven-port (proedu): slam the local player's ENTITY pitch as negated
+		// raw view pitch. HL divided by -3 here, but stock Sven client.dll has
+		// no /-3 pitch math anywhere and V_CalcGunAngle already negates
+		// plainly; the /-3 tilted our thirdperson/corpse model 3x off.
+		float pitch = -pparams->viewangles[0];
 
 		// Normalize angles
 		if( pitch > 180.0f )
 			pitch -= 360.0f;
 		else if( pitch < -180.0f )
 			pitch += 360.0f;
-
-		// Player pitch is inverted
-		pitch /= -3.0f;
 
 		// Slam local player's pitch value
 		ent->angles[0] = pitch;
@@ -1242,7 +1247,7 @@ void V_GetInEyePos( int target, float *origin, float *angles )
 	VectorCopy( ent->origin, origin );
 	VectorCopy( ent->angles, angles );
 
-	angles[PITCH] *= -3.0f;	// see CL_ProcessEntityUpdate()
+	angles[PITCH] *= -1.0f;	// entity pitch is negated raw view pitch: recover view pitch
 
 	if( ent->curstate.solid == SOLID_NOT )
 	{
@@ -1451,7 +1456,7 @@ void V_CalcSpectatorRefdef( struct ref_params_s * pparams )
 		{
 			// only get viewangles from entity
 			VectorCopy( ent->angles, pparams->cl_viewangles );
-			pparams->cl_viewangles[PITCH] *= -3.0f;	// see CL_ProcessEntityUpdate()
+			pparams->cl_viewangles[PITCH] *= -1.0f;	// entity pitch is negated raw view pitch
 		}
 	}
 
@@ -1548,6 +1553,11 @@ void DLLEXPORT V_CalcRefdef( struct ref_params_s *pparams )
 	{
 		V_CalcNormalRefdef( pparams );
 	}
+
+	if( !pparams->intermission && gHUD.m_iFOV > 0 )
+	{
+		pparams->fov_x = gHUD.m_iFOV;
+	}
 /*
 // Example of how to overlay the whole screen with red at 50 % alpha
 #define SF_TEST	1
@@ -1615,6 +1625,7 @@ void V_Init( void )
 	cl_bobup = gEngfuncs.pfnRegisterVariable( "cl_bobup","0.5", 0 );
 	cl_waterdist = gEngfuncs.pfnRegisterVariable( "cl_waterdist","4", 0 );
 	cl_chasedist = gEngfuncs.pfnRegisterVariable( "cl_chasedist","112", 0 );
+	cl_rollangle = gEngfuncs.pfnRegisterVariable( "cl_rollangle", "0", 0 );
 }
 
 //#define TRACE_TEST	1
