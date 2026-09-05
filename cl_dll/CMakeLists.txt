@@ -184,7 +184,7 @@ endif()
 
 if (USE_VGUI)
 	SET(CMAKE_SKIP_RPATH TRUE)
-	link_directories(${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib)
+	# compile against the original VGUI1 public headers (shipped with vgui_support)
 	include_directories(../vgui_support/vgui-dev/include)
 else()
 	include_directories(../utils/fake_vgui/include)
@@ -205,15 +205,18 @@ if (GOLDSOURCE_SUPPORT)
 endif()
 
 if (USE_VGUI)
-	if (WIN32)
-		add_library(vgui SHARED IMPORTED)
-		set_property(TARGET vgui PROPERTY IMPORTED_LOCATION "${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib/win32_vc6/vgui.dll")
-		set_property(TARGET vgui PROPERTY IMPORTED_IMPLIB "${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib/win32_vc6/vgui.lib")
-		target_link_libraries(${CLDLL_LIBRARY} vgui)
-	elseif(APPLE)
-		target_link_libraries(${CLDLL_LIBRARY} "-Wl,--no-undefined -L${CMAKE_SOURCE_DIR}/vgui_support/vgui-dev/lib vgui.dylib")
+	if (USE_STATIC_FREEVGUI)
+		# freevgui is linked statically into the client so the client exports
+		# InitVGUISupportAPI. Use --whole-archive so the self-contained
+		# platform/xash3d-fwgs/app.cpp object (which nothing references from
+		# the rest of the client) is not dropped by the linker — it provides
+		# the engine-facing VGUI entry point.
+		target_link_libraries(${CLDLL_LIBRARY}
+			-Wl,--whole-archive vgui -Wl,--no-whole-archive)
 	else()
-		target_link_libraries(${CLDLL_LIBRARY} :vgui.so)
+		# Link against FWGS/freevgui (3rdparty/freevgui) shared target; it compiles
+		# to the original vgui.so-compatible library name that the engine preloads.
+		target_link_libraries(${CLDLL_LIBRARY} vgui)
 	endif()
 endif()
 
