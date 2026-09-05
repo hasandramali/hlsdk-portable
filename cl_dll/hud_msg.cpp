@@ -82,6 +82,29 @@ void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 	pFlare = NULL;	// Vit_amiN: clear egon's beam flare
 }
 
+void CHud::MsgFunc_CdAudio( const char *pszName, int iSize, void *pbuf )
+{
+	char pathBuf[64];
+	char cmdBuf[400];
+
+	BEGIN_READ( pbuf, iSize );
+	int audioNum = READ_BYTE();
+
+	if( audioNum > 30 )
+		return;
+
+	if( audioNum <= 0 )
+	{
+		gEngfuncs.pfnClientCmd( ";mp3 stop;\n" );
+	}
+	else
+	{
+		sprintf( pathBuf, "media/Half-Life%02d", audioNum - 1 );
+		sprintf( cmdBuf, ";mp3 play %s;\n", pathBuf );
+		gEngfuncs.pfnClientCmd( cmdBuf );
+	}
+}
+
 int CHud::MsgFunc_GameMode( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
@@ -130,5 +153,12 @@ int CHud::MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf )
 	}
 	else
 		this->m_StatusIcons.DisableIcon( "dmg_concuss" );
+	return 1;
+}
+
+int CHud::MsgFunc_ClassicMode( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+	gHUD.m_bClassicMode = READ_BYTE();
 	return 1;
 }

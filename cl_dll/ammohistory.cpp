@@ -125,7 +125,7 @@ int HistoryResource::DrawAmmoHistory( float flTime )
 				HSPRITE *spr = gWR.GetAmmoPicFromWeapon( rgAmmoHistory[i].iId, rcPic );
 
 				int r, g, b;
-				UnpackRGB( r, g, b, RGB_YELLOWISH );
+				UnpackRGB( r, g, b, RGB_BLUEISH );
 				float scale = ( rgAmmoHistory[i].DisplayTime - flTime ) * 80;
 				ScaleColors( r, g, b, Q_min( scale, 255 ) );
 
@@ -135,8 +135,7 @@ int HistoryResource::DrawAmmoHistory( float flTime )
 				if( spr && *spr )    // weapon isn't loaded yet so just don't draw the pic
 				{
 					// the dll has to make sure it has sent info the weapons you need
-					SPR_Set( *spr, r, g, b );
-					SPR_DrawAdditive( 0, xpos, ypos, &rcPic );
+					gHUD.DrawSprite( xpos, ypos, *spr, &rcPic, r, g, b, 0, SPR_ADDITIVE );
 				}
 
 				// do not draw black console string
@@ -152,7 +151,7 @@ int HistoryResource::DrawAmmoHistory( float flTime )
 					return 1;  // we don't know about the weapon yet, so don't draw anything
 
 				int r, g, b;
-				UnpackRGB( r,g,b, RGB_YELLOWISH );
+				UnpackRGB( r,g,b, RGB_BLUEISH );
 
 				if( !gWR.HasAmmo( weap ) )
 					UnpackRGB( r, g, b, RGB_REDISH );	// if the weapon doesn't have ammo, display it as red
@@ -162,8 +161,7 @@ int HistoryResource::DrawAmmoHistory( float flTime )
 
 				int ypos = ScreenHeight - ( AMMO_PICKUP_PICK_HEIGHT + ( AMMO_PICKUP_GAP * i ) );
 				int xpos = ScreenWidth - ( weap->rcInactive.right - weap->rcInactive.left );
-				SPR_Set( weap->hInactive, r, g, b );
-				SPR_DrawAdditive( 0, xpos, ypos, &weap->rcInactive );
+				gHUD.DrawSprite( xpos, ypos, weap->hInactive, &weap->rcInactive, r, g, b, 0, SPR_ADDITIVE );
 			}
 			else if( rgAmmoHistory[i].type == HISTSLOT_ITEM )
 			{
@@ -174,15 +172,14 @@ int HistoryResource::DrawAmmoHistory( float flTime )
 
 				wrect_t rect = gHUD.GetSpriteRect( rgAmmoHistory[i].iId );
 
-				UnpackRGB( r, g, b, RGB_YELLOWISH );
+				UnpackRGB( r, g, b, RGB_BLUEISH );
 				float scale = ( rgAmmoHistory[i].DisplayTime - flTime ) * 80;
 				ScaleColors( r, g, b, Q_min( scale, 255 ) );
 
 				int ypos = ScreenHeight - ( AMMO_PICKUP_PICK_HEIGHT + ( AMMO_PICKUP_GAP * i ) );
 				int xpos = ScreenWidth - ( rect.right - rect.left ) - 10;
 
-				SPR_Set( gHUD.GetSprite( rgAmmoHistory[i].iId ), r, g, b );
-				SPR_DrawAdditive( 0, xpos, ypos, &rect );
+				gHUD.DrawSprite( xpos, ypos, gHUD.GetSprite( rgAmmoHistory[i].iId ), &rect, r, g, b, 0, SPR_ADDITIVE );
 			}
 		}
 	}

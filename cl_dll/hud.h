@@ -23,6 +23,7 @@
 #if !defined(HUD_H)
 #define HUD_H
 #define RGB_YELLOWISH 0x00FFA000 //255,160,0
+#define RGB_BLUEISH 0x006482C8  //100,130,200
 #define RGB_REDISH 0x00FF1010 //255,160,0
 #define RGB_GREENISH 0x0000A000 //0,160,0
 
@@ -45,15 +46,22 @@ typedef struct
 
 enum 
 { 
-	MAX_PLAYERS = 64,
+	MAX_PLAYERS = 32,
 	MAX_TEAMS = 64,
-	MAX_TEAM_NAME = 16
+	MAX_TEAM_NAME = 64
 };
 
 typedef struct
 {
 	unsigned char r, g, b, a;
 } RGBA;
+
+enum SPR_MODE
+{
+	SPR_ADDITIVE = 0,
+	SPR_NORMAL,
+	SPR_TRANSPARENT
+};
 
 typedef struct cvar_s cvar_t;
 
@@ -62,10 +70,10 @@ typedef struct cvar_s cvar_t;
 
 #define MAX_PLAYER_NAME_LENGTH		32
 
-#define	MAX_MOTD_LENGTH				1536
+#define	MAX_MOTD_LENGTH				3072
 
 #define MAX_SERVERNAME_LENGTH	64
-#define MAX_TEAMNAME_SIZE 32
+#define MAX_TEAMNAME_SIZE 64
 
 //
 //-----------------------------------------------------
@@ -291,17 +299,20 @@ protected:
 
 struct extra_player_info_t
 {
-	short frags;
-	short deaths;
+	float score;
+	int deaths;
 	short playerclass;
 	short teamnumber;
 	char teamname[MAX_TEAM_NAME];
+	float health;
+	float armor;
+	char padding[4];
 };
 
 struct team_info_t
 {
 	char name[MAX_TEAM_NAME];
-	short frags;
+	float score;
 	short deaths;
 	short ping;
 	short packetloss;
@@ -546,6 +557,7 @@ private:
 
 public:
 	HSPRITE						m_hsprCursor;
+	float m_fTimeEnd;
 	float m_flTime;	   // the current client time
 	float m_fOldTime;  // the time at which the HUD was last redrawn
 	double m_flTimeDelta; // the difference between flTime and fOldTime
@@ -555,19 +567,33 @@ public:
 	int		m_iHideHUDDisplay;
 	int		m_iFOV;
 	int		m_Teamplay;
+	bool	m_bClassicMode;
 	int		m_iRes;
 	int		m_iMaxRes;
 	int		m_iHudNumbersYOffset;
-	cvar_t  *m_pCvarStealMouse;
 	cvar_t	*m_pCvarDraw;
+	cvar_t	*m_pCvarDebug;
+	cvar_t	*m_pCvarHideCustom;
+	cvar_t	*m_pCvarBorderSize;
+	cvar_t	*m_pCvarAlphaDefault;
+	cvar_t	*m_pCvarAlphaMax;
+	cvar_t  *m_pCvarStealMouse;
 	cvar_t  *m_pAllowHD;
 
 	int m_iFontHeight;
+	int DrawSprite( int x, int y, HSPRITE sprite, wrect_t *rc, int r, int g, int b, int frame, SPR_MODE mode );
+	int DrawConsoleString( int x, int y, char *szString );
 	int DrawHudNumber( int x, int y, int iFlags, int iNumber, int r, int g, int b );
-	int DrawHudString( int x, int y, int iMaxX, const char *szString, int r, int g, int b );
-	int DrawHudStringReverse( int xpos, int ypos, int iMinX, const char *szString, int r, int g, int b );
+	int DrawString( int x, int y, int iMaxX, const char *szString, int r, int g, int b );
+	int DrawStringReverse( int xpos, int ypos, int iMinX, const char *szString, int r, int g, int b );
 	int DrawHudNumberString( int xpos, int ypos, int iMinX, int iNumber, int r, int g, int b );
 	int GetNumWidth( int iNumber, int iFlags );
+	int GetDefaultAlpha();
+	int GetMaxAlpha();
+	void UpdateFade( float &fFade );
+	int GetFadeAlpha( float a );
+	int GetDigitWidth();
+	HSPRITE LoadSprite( char *name, wrect_t &rect );
 	int DrawHudStringLen( const char *szIt );
 	void DrawDarkRectangle( int x, int y, int wide, int tall );
 
@@ -636,9 +662,12 @@ public:
 	int _cdecl MsgFunc_Logo( const char *pszName,  int iSize, void *pbuf );
 	int _cdecl MsgFunc_ResetHUD( const char *pszName,  int iSize, void *pbuf );
 	void _cdecl MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf );
+	void _cdecl MsgFunc_CdAudio( const char *pszName, int iSize, void *pbuf );
+
 	void _cdecl MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf );
 	int _cdecl MsgFunc_SetFOV( const char *pszName,  int iSize, void *pbuf );
 	int  _cdecl MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf );
+	int _cdecl MsgFunc_ClassicMode( const char *pszName, int iSize, void *pbuf );
 
 	// Screen information
 	SCREENINFO	m_scrinfo;
@@ -649,6 +678,8 @@ public:
 
 	// sprite indexes
 	int m_HUD_number_0;
+
+	char m_szServerBuild[128];
 
 	int m_iNoConsolePrint;
 
@@ -666,4 +697,7 @@ extern int g_iTeamNumber;
 extern int g_iUser1;
 extern int g_iUser2;
 extern int g_iUser3;
+
+extern cvar_t *g_pDeveloper;
+extern cvar_t *g_pCrosshair;
 #endif

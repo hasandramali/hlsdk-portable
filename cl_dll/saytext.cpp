@@ -136,15 +136,15 @@ int CHudSayText::Draw( float flTime )
 				// draw the first x characters in the player color
 				strlcpy( buf, g_szLineBuffer[i], Q_min(g_iNameLengths[i] + 1, MAX_PLAYER_NAME_LENGTH + 32 ) );
 				DrawSetTextColor( g_pflNameColors[i][0], g_pflNameColors[i][1], g_pflNameColors[i][2] );
-				int x = DrawConsoleString( LINE_START, y, buf );
+				int x = gHUD.DrawConsoleString( LINE_START, y, buf );
 
 				// color is reset after each string draw
-				DrawConsoleString( x, y, g_szLineBuffer[i] + g_iNameLengths[i] );
+				gHUD.DrawConsoleString( x, y, g_szLineBuffer[i] + g_iNameLengths[i] );
 			}
 			else
 			{
 				// normal draw
-				DrawConsoleString( LINE_START, y, g_szLineBuffer[i] );
+				gHUD.DrawConsoleString( LINE_START, y, g_szLineBuffer[i] );
 			}
 		}
 

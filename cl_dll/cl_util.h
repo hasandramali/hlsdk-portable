@@ -111,7 +111,7 @@ inline int TextMessageDrawChar( int x, int y, int number, int r, int g, int b )
 inline int DrawConsoleString( int x, int y, const char *string )
 {
 	if( hud_textmode->value == 1 )
-		return gHUD.DrawHudString( x, y, 9999, (char*)string, (int)( (float)g_hud_text_color[0] * 255.0f ),
+		return gHUD.DrawString( x, y, 9999, (char*)string, (int)( (float)g_hud_text_color[0] * 255.0f ),
 			(int)( (float)g_hud_text_color[1] * 255.0f ), (int)( (float)g_hud_text_color[2] * 255.0f ) );
 	return gEngfuncs.pfnDrawConsoleString( x, y, (char*) string );
 }
@@ -148,6 +148,8 @@ inline void CenterPrint( const char *string )
 // returns the players name of entity no.
 #define GetPlayerInfo ( *gEngfuncs.pfnGetPlayerInfo )
 
+const char* StripMapFromPFN( const char* str, char* dest );
+
 // sound functions
 inline void PlaySound( const char *szSound, float vol ) { gEngfuncs.pfnPlaySoundByName( szSound, vol ); }
 inline void PlaySound( int iSound, float vol ) { gEngfuncs.pfnPlaySoundByIndex( iSound, vol ); }
@@ -177,6 +179,10 @@ inline int GetSpriteRes( int width, int height )
 	return Q_min( i, gHUD.m_iMaxRes );
 }
 
+void DRAW_DEBUG_LINE_V(int x, int y);
+void DRAW_DEBUG_LINE_H(int x, int y);
+void DRAW_DEBUG_CROSS(int x, int y);
+void DRAW_DEBUG_RECT(int x, int y, int w, int h);
 void ScaleColors( int &r, int &g, int &b, int a );
 
 #define DotProduct(x, y) ((x)[0] * (y)[0] + (x)[1] * (y)[1] + (x)[2] * (y)[2])

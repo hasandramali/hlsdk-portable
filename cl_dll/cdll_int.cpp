@@ -48,6 +48,8 @@ cl_enginefunc_t gEngfuncs;
 CHud gHUD;
 #if USE_VGUI
 TeamFortressViewport *gViewPort = NULL;
+
+cvar_t *g_pDeveloper, *g_pCrosshair;
 #endif
 mobile_engfuncs_t *gMobileEngfuncs = NULL;
 
@@ -160,6 +162,9 @@ int DLLEXPORT Initialize( cl_enginefunc_t *pEnginefuncs, int iVersion )
 
 	// for now filterstuffcmd is last in the engine interface
 	memcpy( &gEngfuncs, pEnginefuncs, sizeof(cl_enginefunc_t) - sizeof( void * ) );
+
+	g_pDeveloper = gEngfuncs.pfnGetCvarPointer("developer");
+	g_pCrosshair = gEngfuncs.pfnGetCvarPointer("crosshair");
 
 	if( gEngfuncs.pfnGetCvarPointer( "cl_filterstuffcmd" ) == 0 )
 	{

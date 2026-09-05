@@ -160,7 +160,7 @@ int CHudScoreboard::Draw( float fTime )
 	else
 		DrawUtfString( xpos, ypos, NAME_RANGE_MAX + xpos_rel, "Teams", 255, 140, 0 );
 
-	gHUD.DrawHudStringReverse( KILLS_RANGE_MAX + xpos_rel, ypos, 0, "kills", 255, 140, 0 );
+	gHUD.DrawStringReverse( KILLS_RANGE_MAX + xpos_rel, ypos, 0, "kills", 255, 140, 0 );
 	DrawUtfString( DIVIDER_POS + xpos_rel, ypos, ScreenWidth, "/", 255, 140, 0 );
 	DrawUtfString( DEATHS_RANGE_MIN + xpos_rel + 5, ypos, ScreenWidth, "deaths", 255, 140, 0 );
 	DrawUtfString( PING_RANGE_MAX + xpos_rel - 35, ypos, ScreenWidth, "latency", 255, 140, 0 );
@@ -188,7 +188,7 @@ int CHudScoreboard::Draw( float fTime )
 	for( i = 1; i <= m_iNumTeams; i++ )
 	{
 		if( !g_TeamInfo[i].scores_overriden )
-			g_TeamInfo[i].frags = g_TeamInfo[i].deaths = 0;
+			g_TeamInfo[i].score = g_TeamInfo[i].deaths = 0;
 		g_TeamInfo[i].ping = g_TeamInfo[i].packetloss = 0;
 	}
 
@@ -212,7 +212,7 @@ int CHudScoreboard::Draw( float fTime )
 
 		if( !g_TeamInfo[j].scores_overriden )
 		{
-			g_TeamInfo[j].frags += g_PlayerExtraInfo[i].frags;
+			g_TeamInfo[j].score += g_PlayerExtraInfo[i].score;
 			g_TeamInfo[j].deaths += g_PlayerExtraInfo[i].deaths;
 		}
 
@@ -248,13 +248,13 @@ int CHudScoreboard::Draw( float fTime )
 			if( g_TeamInfo[i].players < 0 )
 				continue;
 
-			if( !g_TeamInfo[i].already_drawn && g_TeamInfo[i].frags >= highest_frags )
+			if( !g_TeamInfo[i].already_drawn && g_TeamInfo[i].score >= highest_frags )
 			{
-				if( g_TeamInfo[i].frags > highest_frags || g_TeamInfo[i].deaths < lowest_deaths )
+				if( g_TeamInfo[i].score > highest_frags || g_TeamInfo[i].deaths < lowest_deaths )
 				{
 					best_team = i;
 					lowest_deaths = g_TeamInfo[i].deaths;
-					highest_frags = g_TeamInfo[i].frags;
+					highest_frags = g_TeamInfo[i].score;
 				}
 			}
 		}
@@ -292,7 +292,7 @@ int CHudScoreboard::Draw( float fTime )
 
 		// draw kills (right to left)
 		xpos = KILLS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, team_info->frags, r, g, b );
+		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, (int)team_info->score, r, g, b );
 
 		// draw divider
 		xpos = DIVIDER_POS + xpos_rel;
@@ -308,7 +308,7 @@ int CHudScoreboard::Draw( float fTime )
 		sprintf( buf, "%d", team_info->ping );
 		xpos = ( ( PING_RANGE_MAX - PING_RANGE_MIN ) / 2) + PING_RANGE_MIN + xpos_rel + 25;
 		UnpackRGB( r, g, b, RGB_YELLOWISH );
-		gHUD.DrawHudStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
+		gHUD.DrawStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
 
 		//  Packetloss removed on Kelly 'shipping nazi' Bailey's orders
 		if( can_show_packetloss )
@@ -370,16 +370,16 @@ int CHudScoreboard::DrawPlayers( int xpos_rel, float list_slot, int nameoffset, 
 
 		for( int i = 1; i < MAX_PLAYERS; i++ )
 		{
-			if( g_PlayerInfoList[i].name && g_PlayerExtraInfo[i].frags >= highest_frags )
+			if( g_PlayerInfoList[i].name && g_PlayerExtraInfo[i].score >= highest_frags )
 			{
 				if( !( team && stricmp( g_PlayerExtraInfo[i].teamname, team ) ) )  // make sure it is the specified team
 				{
 					extra_player_info_t *pl_info = &g_PlayerExtraInfo[i];
-					if( pl_info->frags > highest_frags || pl_info->deaths < lowest_deaths )
+					if( pl_info->score > highest_frags || pl_info->deaths < lowest_deaths )
 					{
 						best_player = i;
 						lowest_deaths = pl_info->deaths;
-						highest_frags = pl_info->frags;
+						highest_frags = pl_info->score;
 					}
 				}
 			}
@@ -431,7 +431,7 @@ int CHudScoreboard::DrawPlayers( int xpos_rel, float list_slot, int nameoffset, 
 
 		// draw kills (right to left)
 		xpos = KILLS_RANGE_MAX + xpos_rel;
-		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, g_PlayerExtraInfo[best_player].frags, r, g, b );
+		gHUD.DrawHudNumberString( xpos, ypos, KILLS_RANGE_MIN + xpos_rel, (int)g_PlayerExtraInfo[best_player].score, r, g, b );
 
 		// draw divider
 		xpos = DIVIDER_POS + xpos_rel;
@@ -445,7 +445,7 @@ int CHudScoreboard::DrawPlayers( int xpos_rel, float list_slot, int nameoffset, 
 		static char buf[64];
 		sprintf( buf, "%d", g_PlayerInfoList[best_player].ping );
 		xpos = ( ( PING_RANGE_MAX - PING_RANGE_MIN ) / 2 ) + PING_RANGE_MIN + xpos_rel + 25;
-		gHUD.DrawHudStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
+		gHUD.DrawStringReverse( xpos, ypos, xpos - 50, buf, r, g, b );
 
 		//  Packetloss removed on Kelly 'shipping nazi' Bailey's orders
 		if( can_show_packetloss )
@@ -489,15 +489,21 @@ int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbu
 
 	BEGIN_READ( pbuf, iSize );
 	short cl = READ_BYTE();
-	short frags = READ_SHORT();
-	short deaths = READ_SHORT();
+	float score = READ_FLOAT();
+	int deaths = READ_LONG();
+	float health = READ_FLOAT();
+	float armor = READ_FLOAT();
+	short unk1 = READ_BYTE();
+	short unk2 = 0;
 	short playerclass = READ_SHORT();
 	short teamnumber = READ_SHORT();
 
 	if( cl > 0 && cl <= MAX_PLAYERS )
 	{
-		g_PlayerExtraInfo[cl].frags = frags;
+		g_PlayerExtraInfo[cl].score = score;
+		g_PlayerExtraInfo[cl].health = health;
 		g_PlayerExtraInfo[cl].deaths = deaths;
+		g_PlayerExtraInfo[cl].armor = armor;
 		g_PlayerExtraInfo[cl].playerclass = playerclass;
 		g_PlayerExtraInfo[cl].teamnumber = teamnumber;
 
@@ -604,7 +610,7 @@ int CHudScoreboard::MsgFunc_TeamScore( const char *pszName, int iSize, void *pbu
 
 	// use this new score data instead of combined player scores
 	g_TeamInfo[i].scores_overriden = TRUE;
-	g_TeamInfo[i].frags = READ_SHORT();
+	g_TeamInfo[i].score = READ_SHORT();
 	g_TeamInfo[i].deaths = READ_SHORT();
 
 	return 1;

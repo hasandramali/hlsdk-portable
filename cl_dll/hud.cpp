@@ -30,6 +30,9 @@
 
 #include "demo.h"
 #include "demo_api.h"
+#include "pmtrace.h"
+#include "pm_defs.h"
+#include "r_efx.h"
 
 hud_player_info_t	 g_PlayerInfoList[MAX_PLAYERS+1];	   // player info from the engine
 extra_player_info_t  g_PlayerExtraInfo[MAX_PLAYERS+1];   // additional player info sent directly to the client dll
@@ -98,6 +101,8 @@ extern cvar_t *sensitivity;
 cvar_t *cl_lw = NULL;
 cvar_t *cl_viewbob = NULL;
 
+extern vec3_t v_origin;
+
 void ShutdownInput( void );
 
 //DECLARE_MESSAGE( m_Logo, Logo )
@@ -115,6 +120,12 @@ int __MsgFunc_ResetHUD( const char *pszName, int iSize, void *pbuf )
 int __MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
 	gHUD.MsgFunc_InitHUD( pszName, iSize, pbuf );
+	return 1;
+}
+
+int __MsgFunc_CdAudio( const char *pszName, int iSize, void *pbuf )
+{
+	gHUD.MsgFunc_CdAudio( pszName, iSize, pbuf );
 	return 1;
 }
 
@@ -137,6 +148,37 @@ int __MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf )
 int __MsgFunc_GameMode( const char *pszName, int iSize, void *pbuf )
 {
 	return gHUD.MsgFunc_GameMode( pszName, iSize, pbuf );
+}
+
+int __MsgFunc_ClassicMode( const char *pszName, int iSize, void *pbuf )
+{
+	return gHUD.MsgFunc_ClassicMode( pszName, iSize, pbuf );
+}
+
+void __CmdFunc_npc_moveto( void )
+{
+	// in pseudocode we use player origin, I guess?
+	// anyway, v_origin can give accurate result - ScriptedSnark
+	//cl_entity_t* localPlayer = gEngfuncs.GetLocalPlayer();
+
+	//if (localPlayer)
+	//{
+	Vector forward;
+	Vector viewAngles;
+
+	gEngfuncs.GetViewAngles( viewAngles );
+
+	AngleVectors( viewAngles, forward, NULL, NULL );
+	VectorScale( forward, 2048, forward );
+	VectorAdd( forward, v_origin, forward );
+
+	pmtrace_t *tr = gEngfuncs.PM_TraceLine( v_origin, forward, PM_NORMAL, 2, -1 );
+
+	if( tr->fraction != 1.0 )
+		gEngfuncs.pEfxAPI->R_SparkShower( tr->endpos );
+
+	gEngfuncs.pfnServerCmdUnreliable( "npc_moveto" );
+	//}
 }
 
 // TFFree Command Menu
@@ -236,6 +278,16 @@ int __MsgFunc_MOTD(const char *pszName, int iSize, void *pbuf)
 }
 #endif
 
+int __MsgFunc_ServerBuild(const char *pszName, int iSize, void* pbuf)
+{
+	BEGIN_READ( pbuf, iSize );
+
+	char* build = READ_STRING();
+	strncpy( gHUD.m_szServerBuild, build, sizeof(gHUD.m_szServerBuild) );
+
+	return 0;
+}
+
 int __MsgFunc_BuildSt( const char *pszName, int iSize, void *pbuf )
 {
 #if USE_VGUI
@@ -321,6 +373,48 @@ int __MsgFunc_AllowSpec( const char *pszName, int iSize, void *pbuf )
 	return 0;
 }
  
+int __MsgFunc_StartSound( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	int flags = READ_SHORT();
+	int entindex = READ_SHORT();
+	int attn = READ_BYTE();
+	float offset = READ_FLOAT();
+	int channel = READ_BYTE();
+	int soundindex = READ_SHORT();
+
+	/*
+	m.WriteShort(int16(49172)); // ??? (flags, probably)
+	m.WriteShort(0);            // entity index
+	m.WriteByte(0);             // ??? (value doesn't seem to matter)
+	m.WriteFloat(5.234);        // offset in seconds
+	m.WriteByte(7);             // sound channel
+	m.WriteShort(711);          // sound index (subtract 4 from the line number in soundcache/mapname.txt)
+	*/
+
+	return 0;
+}
+
+int __MsgFunc_NextMap( const char *pszName, int iSize, void *pbuf )
+{
+	if( gViewPort )
+		return gViewPort->MsgFunc_NextMap( pszName, iSize, pbuf );
+	return 0;
+}
+
+int __MsgFunc_TimeEnd( const char *pszName, int iSize, void *pbuf )
+{
+	if( gViewPort && gViewPort->m_pScoreBoard )
+	{
+		BEGIN_READ( pbuf, iSize );
+
+		float flTimeEnd = gHUD.m_flTime + READ_LONG();
+		gViewPort->SetEndOfTime( flTimeEnd );
+	}
+	return 1;
+}
+
 // This is called every time the DLL is loaded
 void CHud::Init( void )
 {
@@ -328,9 +422,15 @@ void CHud::Init( void )
 	HOOK_MESSAGE( ResetHUD );
 	HOOK_MESSAGE( GameMode );
 	HOOK_MESSAGE( InitHUD );
+	HOOK_MESSAGE( CdAudio );
 	HOOK_MESSAGE( ViewMode );
 	HOOK_MESSAGE( SetFOV );
 	HOOK_MESSAGE( Concuss );
+	HOOK_MESSAGE( ClassicMode );
+	HOOK_MESSAGE( NextMap );
+	HOOK_MESSAGE( TimeEnd );
+
+	HOOK_COMMAND( "npc_moveto", npc_moveto );
 
 	// TFFree CommandMenu
 	HOOK_COMMAND( "+commandmenu", OpenCommandMenu );
@@ -350,6 +450,8 @@ void CHud::Init( void )
 	HOOK_MESSAGE( MOTD );
 #endif
 
+	HOOK_MESSAGE( ServerBuild );
+
 #if USE_VGUI && !USE_NOVGUI_SCOREBOARD
 	HOOK_MESSAGE( ScoreInfo );
 	HOOK_MESSAGE( TeamScore );
@@ -367,6 +469,8 @@ void CHud::Init( void )
 	// VGUI Menus
 	HOOK_MESSAGE( VGUIMenu );
 
+	HOOK_MESSAGE( StartSound );
+
 	CVAR_CREATE( "hud_classautokill", "1", FCVAR_ARCHIVE | FCVAR_USERINFO );		// controls whether or not to suicide immediately on TF class switch
 	CVAR_CREATE( "hud_takesshots", "0", FCVAR_ARCHIVE );		// controls whether or not to automatically take screenshots at the end of a round
 	hud_textmode = CVAR_CREATE ( "hud_textmode", "0", FCVAR_ARCHIVE );
@@ -376,9 +480,14 @@ void CHud::Init( void )
 
 	CVAR_CREATE( "zoom_sensitivity_ratio", "1.2", FCVAR_ARCHIVE );
 	CVAR_CREATE( "cl_autowepswitch", "1", FCVAR_ARCHIVE | FCVAR_USERINFO );
-	default_fov = CVAR_CREATE( "default_fov", "90", FCVAR_ARCHIVE );
-	m_pCvarStealMouse = CVAR_CREATE( "hud_capturemouse", "1", FCVAR_ARCHIVE );
-	m_pCvarDraw = CVAR_CREATE( "hud_draw", "1", FCVAR_ARCHIVE );
+	m_pCvarDraw = CVAR_CREATE("hud_draw", "1", FCVAR_CLIENTDLL);
+	m_pCvarDebug = CVAR_CREATE("hud_debug", "0", FCVAR_CLIENTDLL);
+	m_pCvarHideCustom = CVAR_CREATE("hud_hidecustom", "0", FCVAR_CLIENTDLL);
+	m_pCvarBorderSize = CVAR_CREATE("hud_bordersize", "16", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_pCvarAlphaDefault = CVAR_CREATE("hud_alpha_default", "160", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_pCvarAlphaMax = CVAR_CREATE("hud_alpha_max", "255", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
+	m_pCvarStealMouse = CVAR_CREATE("hud_capturemouse", "1", FCVAR_ARCHIVE);
+	default_fov = CVAR_CREATE("default_fov", "70", FCVAR_ARCHIVE);
 	m_pAllowHD = CVAR_CREATE ( "hud_allow_hd", "1", FCVAR_ARCHIVE );
 	cl_lw = gEngfuncs.pfnGetCvarPointer( "cl_lw" );
 	cl_viewbob = CVAR_CREATE( "cl_viewbob", "1", FCVAR_ARCHIVE );

@@ -63,7 +63,7 @@ void IgnoreNextMouseDelta();
 class CCommandMenu;
 
 // Scoreboard positions
-#define SBOARD_INDENT_X			XRES( 104 )
+#define SBOARD_INDENT_X			XRES( 80 )
 #define SBOARD_INDENT_Y			YRES( 40 )
 
 // low-res scoreboard indents
@@ -81,13 +81,14 @@ using namespace vgui;
 
 // Team Colors
 int iNumberOfTeamColors = 5;
-int iTeamColors[5][3] =
+int iTeamColors[6][3] =
 {
-	{ 255, 170, 0 },	// HL orange (default)
-	{ 125, 165, 210 },	// Blue
-	{ 200, 90, 70 },	// Red
-	{ 225, 205, 45 },	// Yellow
-	{ 145, 215, 140 },	// Green
+	{ 101, 128, 152 },	// Sven Co-op dark blue (default)
+	{ 31, 95, 255 },	// Blue
+	{ 255, 31, 31 },	// Red
+	{ 255, 255, 95 },	// Yellow
+	{ 31, 255, 95 },	// Green
+	{ 255, 255, 255 },	// White
 };
 
 // Used for Class specific buttons
@@ -551,7 +552,7 @@ TeamFortressViewport::TeamFortressViewport( int x, int y, int wide, int tall ) :
 		// used for orange borders around buttons
 		m_SchemeManager.getBorderColor( hPrimaryScheme, r, g, b, a );
 		// pScheme->setColor( Scheme::sc_secondary1, r, g, b, a );
-		pScheme->setColor( Scheme::sc_secondary1, 255 * 0.7, 170 * 0.7, 0, 0);
+		pScheme->setColor( Scheme::sc_secondary1, 255, 255, 255, 0 );
 	}
 
 	// Change the second primary font (used in the scoreboard)
@@ -1325,16 +1326,6 @@ void TeamFortressViewport::UpdateSpectatorPanel()
 void TeamFortressViewport::CreateScoreBoard( void )
 {
 	int xdent = SBOARD_INDENT_X, ydent = SBOARD_INDENT_Y;
-	if( ScreenWidth == 512 )
-	{
-		xdent = SBOARD_INDENT_X_512; 
-		ydent = SBOARD_INDENT_Y_512;
-	}
-	else if( ScreenWidth == 400 )
-	{
-		xdent = SBOARD_INDENT_X_400; 
-		ydent = SBOARD_INDENT_Y_400;
-	}
 
 	m_pScoreBoard = new ScorePanel( xdent, ydent, ScreenWidth - ( xdent * 2 ), ScreenHeight - ( ydent * 2 ) );
 	m_pScoreBoard->setParent( this );
@@ -1358,6 +1349,13 @@ void TeamFortressViewport::SetCurrentMenu( CMenuPanel *pMenu )
 	{
 		gEngfuncs.pfnClientCmd( "closemenus;" );
 	}
+}
+
+//================================================================
+// Time End
+void TeamFortressViewport::SetEndOfTime( float flTimeEnd )
+{
+	gHUD.m_fTimeEnd = flTimeEnd;
 }
 
 //================================================================
@@ -1645,12 +1643,6 @@ void TeamFortressViewport::CreateSpectatorMenu()
 // Recalculate any menus that use it.
 void TeamFortressViewport::UpdateOnPlayerInfo()
 {
-	if( m_pTeamMenu )
-		m_pTeamMenu->Update();
-
-	if( m_pClassMenu )
-		m_pClassMenu->Update();
-
 	if( m_pScoreBoard )
 		m_pScoreBoard->Update();
 }
@@ -1990,9 +1982,15 @@ int TeamFortressViewport::MsgFunc_MOTD( const char *pszName, int iSize, void *pb
 	strlcat( m_szMOTD, READ_STRING(), sizeof( m_szMOTD ));
 
 	// don't show MOTD for HLTV spectators
-	if( m_iGotAllMOTD && !gEngfuncs.IsSpectateOnly() )
+	if( m_iGotAllMOTD )
 	{
-		ShowVGUIMenu( MENU_INTRO );
+		if( m_szMOTD[0] )
+			ShowVGUIMenu( MENU_INTRO );
+	}
+	else
+	{
+		strncpy( m_szMOTD, "No server MOTD available.", sizeof( m_szMOTD ) );
+		ShowVGUIMenu( MENU_MAPBRIEFING );
 	}
 
 	return 1;
@@ -2032,21 +2030,23 @@ int TeamFortressViewport::MsgFunc_ScoreInfo( const char *pszName, int iSize, voi
 {
 	BEGIN_READ( pbuf, iSize );
 	short cl = READ_BYTE();
-	short frags = READ_SHORT();
-	short deaths = READ_SHORT();
+	float score = READ_FLOAT();
+	int deaths = READ_LONG();
+	float health = READ_FLOAT();
+	float armor = READ_FLOAT();
+	short unk1 = READ_BYTE();
+	short unk2 = 0;
 	short playerclass = READ_SHORT();
 	short teamnumber = READ_SHORT();
 
 	if( cl > 0 && cl <= MAX_PLAYERS )
 	{
-		g_PlayerExtraInfo[cl].frags = frags;
+		g_PlayerExtraInfo[cl].score = score;
+		g_PlayerExtraInfo[cl].health = health;
 		g_PlayerExtraInfo[cl].deaths = deaths;
+		g_PlayerExtraInfo[cl].armor = armor;
 		g_PlayerExtraInfo[cl].playerclass = playerclass;
 		g_PlayerExtraInfo[cl].teamnumber = teamnumber;
-
-		//Dont go bellow 0!
-		if( g_PlayerExtraInfo[cl].teamnumber < 0 )
-			 g_PlayerExtraInfo[cl].teamnumber = 0;
 
 		UpdateOnPlayerInfo();
 	}
@@ -2078,7 +2078,7 @@ int TeamFortressViewport::MsgFunc_TeamScore( const char *pszName, int iSize, voi
 
 	// use this new score data instead of combined player scoresw
 	g_TeamInfo[i].scores_overriden = TRUE;
-	g_TeamInfo[i].frags = READ_SHORT();
+	g_TeamInfo[i].score = READ_SHORT();
 	g_TeamInfo[i].deaths = READ_SHORT();
 
 	return 1;
@@ -2135,10 +2135,6 @@ int TeamFortressViewport::MsgFunc_AllowSpec( const char *pszName, int iSize, voi
 	// Force the menu to update
 	UpdateCommandMenu( m_StandardMenu );
 
-	// If the team menu is up, update it too
-	if( m_pTeamMenu )
-		m_pTeamMenu->Update();
-
 	return 1;
 }
 
@@ -2151,5 +2147,16 @@ int TeamFortressViewport::MsgFunc_ResetFade( const char *pszName, int iSize, voi
 // used to fade a player's screen out/in when they're spectating someone who is teleported
 int TeamFortressViewport::MsgFunc_SpecFade( const char *pszName, int iSize, void *pbuf )
 {
+	return 1;
+}
+
+int TeamFortressViewport::MsgFunc_NextMap( const char *pszName, int iSize, void *pbuf )
+{
+	BEGIN_READ( pbuf, iSize );
+
+	const char *pszNextMap = READ_STRING();
+
+	strncpy( gViewPort->m_sNextMapName, pszNextMap, sizeof( gViewPort->m_sNextMapName ) );
+
 	return 1;
 }

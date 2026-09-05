@@ -60,7 +60,7 @@ int CHudAmmoSecondary::Draw( float flTime )
 
 	// draw secondary ammo icons above normal ammo readout
 	int a, x, y, r, g, b, AmmoWidth;
-	UnpackRGB( r, g, b, RGB_YELLOWISH );
+	UnpackRGB( r, g, b, RGB_BLUEISH );
 	a = (int)Q_max( MIN_ALPHA, m_fFade );
 	if( m_fFade > 0 )
 		m_fFade -= ( (float)gHUD.m_flTimeDelta * 20.0f );  // slowly lower alpha to fade out icons
@@ -77,8 +77,7 @@ int CHudAmmoSecondary::Draw( float flTime )
 		x -= ( gHUD.GetSpriteRect( m_HUD_ammoicon ).right - gHUD.GetSpriteRect( m_HUD_ammoicon ).left );
 		y -= ( gHUD.GetSpriteRect( m_HUD_ammoicon ).top - gHUD.GetSpriteRect( m_HUD_ammoicon ).bottom );
 
-		SPR_Set( gHUD.GetSprite( m_HUD_ammoicon ), r, g, b );
-		SPR_DrawAdditive( 0, x, y, &gHUD.GetSpriteRect( m_HUD_ammoicon ) );
+		gHUD.DrawSprite( x, y, gHUD.GetSprite( m_HUD_ammoicon ), &gHUD.GetSpriteRect( m_HUD_ammoicon ), r, g, b, 0, SPR_ADDITIVE );
 	}
 	else
 	{

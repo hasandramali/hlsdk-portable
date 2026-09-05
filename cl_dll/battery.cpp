@@ -80,7 +80,7 @@ int CHudBattery::Draw( float flTime )
 	rc = *m_prc2;
 	rc.top  += m_iHeight * ( (float)( 100 - ( Q_min( 100, m_iBat ) ) ) * 0.01f );	// battery can go from 0 to 100 so * 0.01 goes from 0 to 1
 
-	UnpackRGB( r, g, b, RGB_YELLOWISH );
+	UnpackRGB( r, g, b, RGB_BLUEISH );
 
 	if( !( gHUD.m_iWeaponBits & ( 1 << ( WEAPON_SUIT ) ) ) )
 		return 1;
@@ -121,13 +121,10 @@ int CHudBattery::Draw( float flTime )
 	if( !m_hSprite2 )
 		m_hSprite2 = gHUD.GetSprite( gHUD.GetSpriteIndex( "suit_full" ) );
 
-	SPR_Set( m_hSprite1, r, g, b );
-	SPR_DrawAdditive( 0,  x, y - iOffset, m_prc1 );
-
+	gHUD.DrawSprite( x, y - iOffset, m_hSprite1, m_prc1, r, g, b, 0, SPR_ADDITIVE );
 	if( rc.bottom > rc.top )
 	{
-		SPR_Set( m_hSprite2, r, g, b );
-		SPR_DrawAdditive( 0, x, y - iOffset + ( rc.top - m_prc2->top ), &rc );
+		gHUD.DrawSprite( x, y - iOffset + ( rc.top - m_prc2->top ), m_hSprite2, &rc, r, g, b, 0, SPR_ADDITIVE );
 	}
 
 	x += ( m_prc1->right - m_prc1->left );
