@@ -1548,6 +1548,11 @@ void DLLEXPORT V_CalcRefdef( struct ref_params_s *pparams )
 	{
 		V_CalcNormalRefdef( pparams );
 	}
+
+	if( !pparams->intermission && gHUD.m_iFOV > 0 )
+	{
+		pparams->fov_x = gHUD.m_iFOV;
+	}
 /*
 // Example of how to overlay the whole screen with red at 50 % alpha
 #define SF_TEST	1
