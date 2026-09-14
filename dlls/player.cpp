@@ -199,7 +199,7 @@ void LinkUserMessages( void )
 	gmsgFlashlight = REG_USER_MSG( "Flashlight", 2 );
 	gmsgFlashBattery = REG_USER_MSG( "FlashBat", 1 );
 	gmsgHealth = REG_USER_MSG( "Health", 1 );
-	gmsgDamage = REG_USER_MSG( "Damage", 12 );
+	gmsgDamage = REG_USER_MSG( "Damage", 18 );
 	gmsgBattery = REG_USER_MSG( "Battery", 2);
 	gmsgTrain = REG_USER_MSG( "Train", 1 );
 	//gmsgHudText = REG_USER_MSG( "HudTextPro", -1 );
