@@ -31,6 +31,50 @@
 // Global engine <-> studio model rendering code interface
 engine_studio_api_t IEngineStudio;
 
+// Reject corrupt/bogus studio models at render time instead of letting the
+// header-driven walks in StudioSetupBones/StudioGetAnim/StudioRenderModel
+// SEGV on garbage offsets. The engine returns NULL extradata for non-studio
+// models (Mod_StudioExtradata) and caches exactly phdr->length bytes for
+// studio models, so every index field must stay inside that block.
+static int StudioHeaderIsValid( studiohdr_t *hdr, model_t *model, int entityIndex )
+{
+	if( hdr == NULL )
+		return 0;
+
+	if( hdr->ident != IDSTUDIOHEADER || hdr->version != STUDIO_VERSION )
+	{
+		gEngfuncs.Con_DPrintf( "StudioModelRenderer: bad ident %d version %d on %s (ent %d)\n",
+			hdr->ident, hdr->version, model ? model->name : "?", entityIndex );
+		return 0;
+	}
+
+	unsigned int length = (unsigned int)hdr->length;
+	if( length < sizeof( studiohdr_t ) )
+	{
+		gEngfuncs.Con_DPrintf( "StudioModelRenderer: short length %u on %s (ent %d)\n",
+			length, model ? model->name : "?", entityIndex );
+		return 0;
+	}
+
+	if( hdr->numseq <= 0 || (unsigned int)hdr->seqindex >= length ||
+		(unsigned int)hdr->numseq > ( length - (unsigned int)hdr->seqindex ) / sizeof( mstudioseqdesc_t ) )
+	{
+		gEngfuncs.Con_DPrintf( "StudioModelRenderer: bad seq %d/%d on %s (ent %d)\n",
+			hdr->numseq, hdr->seqindex, model ? model->name : "?", entityIndex );
+		return 0;
+	}
+
+	if( hdr->numbones < 0 || (unsigned int)hdr->boneindex >= length ||
+		(unsigned int)hdr->numbones > ( length - (unsigned int)hdr->boneindex ) / sizeof( mstudiobone_t ) )
+	{
+		gEngfuncs.Con_DPrintf( "StudioModelRenderer: bad bones %d/%d on %s (ent %d)\n",
+			hdr->numbones, hdr->boneindex, model ? model->name : "?", entityIndex );
+		return 0;
+	}
+
+	return 1;
+}
+
 /////////////////////
 // Implementation of CStudioModelRenderer.h
 #define LEGS_BONES_COUNT	8
@@ -1155,6 +1199,11 @@ int CStudioModelRenderer::StudioDrawModel( int flags )
 
 	m_pRenderModel = m_pCurrentEntity->model;
 	m_pStudioHeader = (studiohdr_t *)IEngineStudio.Mod_Extradata( m_pRenderModel );
+
+	// don't let corrupt/truncated studio headers reach the header-driven walks
+	if( !StudioHeaderIsValid( m_pStudioHeader, m_pRenderModel, m_pCurrentEntity->index ) )
+		return 0;
+
 	IEngineStudio.StudioSetHeader( m_pStudioHeader );
 	IEngineStudio.SetRenderModel( m_pRenderModel );
 
@@ -1419,6 +1468,11 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 		return 0;
 
 	m_pStudioHeader = (studiohdr_t *)IEngineStudio.Mod_Extradata( m_pRenderModel );
+
+	// don't let corrupt/truncated studio headers reach the header-driven walks
+	if( !StudioHeaderIsValid( m_pStudioHeader, m_pRenderModel, m_pCurrentEntity->index ) )
+		return 0;
+
 	IEngineStudio.StudioSetHeader( m_pStudioHeader );
 	IEngineStudio.SetRenderModel( m_pRenderModel );
 
@@ -1534,15 +1588,20 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 			model_t *pweaponmodel = IEngineStudio.GetModelByIndex( pplayer->weaponmodel );
 
 			m_pStudioHeader = (studiohdr_t *)IEngineStudio.Mod_Extradata( pweaponmodel );
-			IEngineStudio.StudioSetHeader( m_pStudioHeader );
 
-			StudioMergeBones( pweaponmodel );
+			// skip the weapon viewmodel if missing or corrupt
+			if( pweaponmodel != NULL && StudioHeaderIsValid( m_pStudioHeader, pweaponmodel, m_pCurrentEntity->index ) )
+			{
+				IEngineStudio.StudioSetHeader( m_pStudioHeader );
 
-			IEngineStudio.StudioSetupLighting( &lighting );
+				StudioMergeBones( pweaponmodel );
 
-			StudioRenderModel();
+				IEngineStudio.StudioSetupLighting( &lighting );
 
-			StudioCalcAttachments();
+				StudioRenderModel();
+
+				StudioCalcAttachments();
+			}
 
 			*m_pCurrentEntity = saveent;
 		}
