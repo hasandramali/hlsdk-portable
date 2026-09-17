@@ -20,7 +20,7 @@
 #if !defined(CDLL_DLL_H)
 #define CDLL_DLL_H
 
-#define MAX_WEAPONS		32		// ???
+#define MAX_WEAPONS		64		// Sven Co-op id space (engine MAX_WEAPONS=64; vanilla was 32)
 
 #define MAX_WEAPON_SLOTS		5	// hud item selection slots
 #define MAX_ITEM_TYPES			6	// hud item selection slots

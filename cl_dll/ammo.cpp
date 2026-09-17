@@ -489,10 +489,15 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
 
-	int iIndex = READ_BYTE();
-	int iCount = READ_BYTE();
+	// Sven Co-op server (server.dll:0x10266EF0, binary-verified) writes
+	// AmmoX as three SHORTs: ammo index, current count, reserve. Vanilla
+	// was BYTE/BYTE, which drifted the ammo HUD.
+	int iIndex = READ_SHORT();
+	int iCount = READ_SHORT();
+	READ_SHORT(); // reserve/max, unused by the HUD
 
-	gWR.SetAmmo( iIndex, abs( iCount ) );
+	if( iIndex >= 0 && iIndex < MAX_AMMO_TYPES )
+		gWR.SetAmmo( iIndex, ( iCount < 0 ) ? -iCount : iCount );
 
 	return 1;
 }
@@ -568,16 +573,24 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	BEGIN_READ( pbuf, iSize );
 
 	int iState = READ_BYTE();
-	int iId = READ_CHAR();
-	int iClip = READ_CHAR();
+	int iId = READ_SHORT();
+	int iClip = READ_LONG();
+	int iAmmo = READ_LONG(); // clip and ammo are sent as LONG by Sven's server, -1 means infinite
 
-	// detect if we're also on target
+	// Match Sven client.dll (0x10002fb0): values below -1 are clamped to 0,
+	// -1 stays -1 (infinite). Vanilla only ever sends 0..255 so both paths are safe.
+	if( iClip < -1 )
+		iClip = 0;
+	if( iAmmo < -1 )
+		iAmmo = 0;
+
+	// detect if we're also on target (vanilla state 2, Sven bit 1)
 	if( iState > 1 )
 	{
 		fOnTarget = TRUE;
 	}
 
-	if( iId < 1 )
+	if( iId < 1 || iId >= MAX_WEAPONS )
 	{
 		SetCrosshair( 0, nullrc, 0, 0, 0 );
 		// Clear out the weapon so we don't keep drawing the last active weapon's ammo. - Solokiller
@@ -602,12 +615,10 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	if( !pWeapon )
 		return 0;
 
-	if( iClip < -1 )
-		pWeapon->iClip = abs( iClip );
-	else
-		pWeapon->iClip = iClip;
+	pWeapon->iClip = iClip;
 
-	if( iState == 0 )	// we're not the current weapon, so update no more
+	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
+	if( iState == 0 )
 		return 1;
 
 	m_pWeapon = pWeapon;
@@ -647,22 +658,36 @@ int CHudAmmo::MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf )
 	
 	WEAPON Weapon;
 
-	strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
+strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 
-	Weapon.iAmmoType = (int)READ_CHAR();	
-	
-	Weapon.iMax1 = READ_BYTE();
-	if( Weapon.iMax1 == 255 )
-		Weapon.iMax1 = -1;
+	// Sven Co-op server (server.dll:0x10202560, binary-verified) sends
+	// STRING + LONG(ammo1 idx) + LONG(max1) + BYTE(ammo2 idx) + BYTE(max2)
+	// + BYTE(slot) + SHORT(id) + BYTE(flags) -- not the vanilla byte order.
+	// The old CHAR/BYTE/.../CHAR read drifted by one LONG; fixing it aligns
+	// Weapon.iId with the id that CurWeapon sends, so gWR.GetWeapon() works.
+	Weapon.iAmmoType = (int)READ_LONG();
 
-	Weapon.iAmmo2Type = READ_CHAR();
+	Weapon.iMax1 = READ_LONG();
+
+	Weapon.iAmmo2Type = (int)READ_BYTE();
 	Weapon.iMax2 = READ_BYTE();
 	if( Weapon.iMax2 == 255 )
 		Weapon.iMax2 = -1;
 
-	Weapon.iSlot = READ_CHAR();
-	Weapon.iSlotPos = READ_CHAR();
-	Weapon.iId = READ_CHAR();
+	Weapon.iSlot = READ_BYTE();
+
+	// Sven has no slot position in the wire; assign a per-slot ordinal so
+	// several weapons in one slot don't overwrite each other in rgSlots[].
+	Weapon.iSlotPos = 0;
+	for( int i = 0; i < MAX_WEAPONS; i++ )
+	{
+		if( gWR.GetWeapon( i )->iId && gWR.GetWeapon( i )->iSlot == Weapon.iSlot )
+			Weapon.iSlotPos++;
+	}
+	if( Weapon.iSlotPos >= MAX_WEAPON_POSITIONS )
+		Weapon.iSlotPos = MAX_WEAPON_POSITIONS - 1;
+
+	Weapon.iId = READ_SHORT();
 	Weapon.iFlags = READ_BYTE();
 	Weapon.iClip = 0;
 
