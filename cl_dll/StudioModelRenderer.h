@@ -76,6 +76,19 @@ public:
 	// Compute rotations
 	virtual void StudioCalcRotations( float pos[][3], vec4_t *q, mstudioseqdesc_t *pseqdesc, mstudioanim_t *panim, float f );
 
+	// Clamp the model's advertised bone count to the renderer's fixed-size
+	// arrays (corrupt/truncated studio headers can advertise absurd counts).
+	int StudioNumBones( void );
+
+	// Return a bone-table pointer that is guaranteed to point at least one
+	// full entry inside the loaded model block (corrupt boneindex degrades to
+	// reading the header itself, which is in-block and stable).
+	mstudiobone_t *StudioGetBones( void );
+
+	// Validate an mstudioanim_t-relative offset so the derived pointer stays
+	// inside the embedded model block; 0 means "use bone default" to callers.
+	int StudioSafeAnimOffset( mstudioanim_t *panim, int off );
+
 	// Send bones and verts to renderer
 	virtual void StudioRenderModel( void );
 

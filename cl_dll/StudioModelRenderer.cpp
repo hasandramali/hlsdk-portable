@@ -236,13 +236,15 @@ void CStudioModelRenderer::StudioCalcBoneQuaterion( int frame, float s, mstudiob
 
 	for( j = 0; j < 3; j++ )
 	{
-		if( panim->offset[j + 3] == 0 )
+		int ot = StudioSafeAnimOffset( panim, panim->offset[j + 3] );
+
+		if( ot == 0 )
 		{
 			angle2[j] = angle1[j] = pbone->value[ j + 3]; // default;
 		}
 		else
 		{
-			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + panim->offset[j + 3] );
+			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + ot );
 			k = frame;
 			// DEBUG
 			if( panimvalue->num.total < panimvalue->num.valid )
@@ -320,10 +322,12 @@ void CStudioModelRenderer::StudioCalcBonePosition( int frame, float s, mstudiobo
 
 	for( j = 0; j < 3; j++ )
 	{
+		int ot = StudioSafeAnimOffset( panim, panim->offset[j] );
+
 		pos[j] = pbone->value[j]; // default;
-		if( panim->offset[j] != 0 )
+		if( ot != 0 )
 		{
-			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + panim->offset[j] );
+			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + ot );
 			/*
 			if( i == 0 && j == 0 )
 				Con_DPrintf( "%d  %d:%d  %f\n", frame, panimvalue->num.valid, panimvalue->num.total, s );
@@ -393,7 +397,9 @@ void CStudioModelRenderer::StudioSlerpBones( vec4_t q1[], float pos1[][3], vec4_
 
 	s1 = 1.0f - s;
 
-	switch (m_pStudioHeader->numbones % 4)
+	int iNumbones = StudioNumBones();
+
+	switch (iNumbones % 4)
 	{
 	case 3:
 		QuaternionSlerp( q1[0], q2[0], s, q1[0] );
@@ -410,10 +416,10 @@ void CStudioModelRenderer::StudioSlerpBones( vec4_t q1[], float pos1[][3], vec4_
 	case 0:
 		break;
 	}
-	for ( i = m_pStudioHeader->numbones % 4; i < m_pStudioHeader->numbones; i += 4 )
+	for ( i = iNumbones % 4; i < iNumbones; i += 4 )
 		QuaternionSlerpX4( q1 + i, q2 + i, s, q1 + i );
 
-	for( i = 0; i < m_pStudioHeader->numbones; i++ )
+	for( i = 0; i < iNumbones; i++ )
 	{
 		pos1[i][0] = pos1[i][0] * s1 + pos2[i][0] * s;
 		pos1[i][1] = pos1[i][1] * s1 + pos2[i][1] * s;
@@ -432,6 +438,18 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 	mstudioseqgroup_t *pseqgroup;
 	cache_user_t *paSequences;
 	int iSeqGroup;
+	long rel = (byte *)pseqdesc - (byte *)m_pStudioHeader;
+	int bounds = m_pStudioHeader->length;
+
+	// The sequence descriptor itself lies outside the loaded model block
+	// (corrupt/oversized seqindex, truncated header, bad sequence index).
+	// Reading seqgroup/animindex here would deref unmapped memory - treat the
+	// whole sequence as unusable and degrade to the embedded header data.
+	if( rel < 0 || rel + (long)sizeof(mstudioseqdesc_t) > bounds )
+	{
+		gEngfuncs.Con_DPrintf( "StudioGetAnim: seqdesc %ld out of range (%d), using group 0\n", rel, bounds );
+		return (mstudioanim_t *)( (byte *)m_pStudioHeader );
+	}
 
 	iSeqGroup = pseqdesc->seqgroup;
 
@@ -448,7 +466,6 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 	if( iSeqGroup == 0 )
 	{
 		int animindex = pseqdesc->animindex;
-		int bounds = m_pStudioHeader->length;
 
 		// Corrupt/truncated studio headers can carry an animindex far outside
 		// the loaded model block (the engine allocates the studio cache
@@ -482,6 +499,60 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 	}
 
 	return (mstudioanim_t *)( (byte *)paSequences[iSeqGroup].data + pseqdesc->animindex );
+}
+
+/*
+====================
+StudioNumBones
+
+====================
+*/
+int CStudioModelRenderer::StudioNumBones( void )
+{
+	int num = m_pStudioHeader->numbones;
+
+	// The fixed-size pose/bone caches are sized to MAXSTUDIOBONES. A corrupt
+	// header can advertise a huge count and make every bone loop walk past
+	// both the arrays and the loaded model block.
+	if( num < 0 || num > MAXSTUDIOBONES )
+		return MAXSTUDIOBONES;
+	return num;
+}
+
+/*
+====================
+StudioGetBones
+
+====================
+*/
+mstudiobone_t *CStudioModelRenderer::StudioGetBones( void )
+{
+	int boneindex = m_pStudioHeader->boneindex;
+	int bounds = m_pStudioHeader->length;
+
+	if( boneindex < 0 || boneindex + (int)sizeof(mstudiobone_t) > bounds )
+		boneindex = 0;	// corrupt bone table; read header-as-bones (in-block, garbage but stable)
+	return (mstudiobone_t *)( (byte *)m_pStudioHeader + boneindex );
+}
+
+/*
+====================
+StudioSafeAnimOffset
+
+====================
+*/
+int CStudioModelRenderer::StudioSafeAnimOffset( mstudioanim_t *panim, int off )
+{
+	long rel = (byte *)panim - (byte *)m_pStudioHeader;
+	int bounds = m_pStudioHeader->length;
+
+	// panim outside the embedded block (e.g. external seqgroup data) or the
+	// derived location beyond it cannot be validated here: treat as "default".
+	if( rel < 0 || rel >= bounds || off <= 0 )
+		return 0;
+	if( off + rel >= bounds )
+		return 0;
+	return off;
 }
 
 /*
@@ -706,11 +777,13 @@ void CStudioModelRenderer::StudioCalcRotations( float pos[][3], vec4_t *q, mstud
 	s = ( f - frame );
 
 	// add in programtic controllers
-	pbone = (mstudiobone_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->boneindex );
+	pbone = StudioGetBones();
+
+	int iNumbones = StudioNumBones();
 
 	StudioCalcBoneAdj( dadt, adj, m_pCurrentEntity->curstate.controller, m_pCurrentEntity->latched.prevcontroller, m_pCurrentEntity->mouth.mouthopen );
 
-	for( i = 0; i < m_pStudioHeader->numbones; i++, pbone++, panim++ )
+	for( i = 0; i < iNumbones; i++, pbone++, panim++ )
 	{
 		StudioCalcBoneQuaterion( frame, s, pbone, panim, adj, q[i] );
 
@@ -719,30 +792,30 @@ void CStudioModelRenderer::StudioCalcRotations( float pos[][3], vec4_t *q, mstud
 		//	Con_DPrintf( "%d %d %d %d\n", m_pCurrentEntity->curstate.sequence, frame, j, k );
 	}
 
-	if( pseqdesc->motiontype & STUDIO_X )
+	if( pseqdesc->motiontype & STUDIO_X && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][0] = 0.0f;
 	}
-	if( pseqdesc->motiontype & STUDIO_Y )
+	if( pseqdesc->motiontype & STUDIO_Y && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][1] = 0.0f;
 	}
-	if( pseqdesc->motiontype & STUDIO_Z )
+	if( pseqdesc->motiontype & STUDIO_Z && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][2] = 0.0f;
 	}
 
 	s = 0 * ( ( 1.0f - ( f - (int)( f ) ) ) / ( pseqdesc->numframes ) ) * m_pCurrentEntity->curstate.framerate;
 
-	if( pseqdesc->motiontype & STUDIO_LX )
+	if( pseqdesc->motiontype & STUDIO_LX && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][0] += s * pseqdesc->linearmovement[0];
 	}
-	if( pseqdesc->motiontype & STUDIO_LY )
+	if( pseqdesc->motiontype & STUDIO_LY && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][1] += s * pseqdesc->linearmovement[1];
 	}
-	if( pseqdesc->motiontype & STUDIO_LZ )
+	if( pseqdesc->motiontype & STUDIO_LZ && pseqdesc->motionbone < iNumbones )
 	{
 		pos[pseqdesc->motionbone][2] += s * pseqdesc->linearmovement[2];
 	}
@@ -864,6 +937,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 {
 	int i, j;
 	double f;
+	int iNumbones;
 
 	mstudiobone_t *pbones;
 	mstudioseqdesc_t *pseqdesc;
@@ -879,6 +953,8 @@ void CStudioModelRenderer::StudioSetupBones( void )
 	static vec4_t q3[MAXSTUDIOBONES];
 	static float pos4[MAXSTUDIOBONES][3];
 	static vec4_t q4[MAXSTUDIOBONES];
+
+	iNumbones = StudioNumBones();
 
 	if( m_pCurrentEntity->curstate.sequence >=  m_pStudioHeader->numseq )
 	{
@@ -902,7 +978,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		float s;
 		float dadt;
 
-		panim += m_pStudioHeader->numbones;
+		panim += iNumbones;
 		StudioCalcRotations( pos2, q2, pseqdesc, panim, f );
 
 		dadt = StudioEstimateInterpolant();
@@ -912,10 +988,10 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 		if( pseqdesc->numblends == 4 )
 		{
-			panim += m_pStudioHeader->numbones;
+			panim += iNumbones;
 			StudioCalcRotations( pos3, q3, pseqdesc, panim, f );
 
-			panim += m_pStudioHeader->numbones;
+			panim += iNumbones;
 			StudioCalcRotations( pos4, q4, pseqdesc, panim, f );
 
 			s = ( m_pCurrentEntity->curstate.blending[0] * dadt + m_pCurrentEntity->latched.prevblending[0] * ( 1.0 - dadt ) ) / 255.0;
@@ -942,7 +1018,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 		if( pseqdesc->numblends > 1 )
 		{
-			panim += m_pStudioHeader->numbones;
+			panim += iNumbones;
 			StudioCalcRotations( pos2, q2, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
 			s = (m_pCurrentEntity->latched.prevseqblending[0]) / 255.0;
@@ -950,10 +1026,10 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 			if( pseqdesc->numblends == 4 )
 			{
-				panim += m_pStudioHeader->numbones;
+				panim += iNumbones;
 				StudioCalcRotations( pos3, q3, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
-				panim += m_pStudioHeader->numbones;
+				panim += iNumbones;
 				StudioCalcRotations( pos4, q4, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
 				s = ( m_pCurrentEntity->latched.prevseqblending[0] ) / 255.0;
@@ -973,7 +1049,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		m_pCurrentEntity->latched.prevframe = f;
 	}
 
-	pbones = (mstudiobone_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->boneindex );
+	pbones = StudioGetBones();
 
 	// calc gait animation
 	if( m_pPlayerInfo && m_pPlayerInfo->gaitsequence != 0 )
@@ -988,7 +1064,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		panim = StudioGetAnim( m_pRenderModel, pseqdesc );
 		StudioCalcRotations( pos2, q2, pseqdesc, panim, m_pPlayerInfo->gaitframe );
 
-		for( i = 0; i < m_pStudioHeader->numbones; i++ )
+		for( i = 0; i < iNumbones; i++ )
 		{
 			for( j = 0; j < LEGS_BONES_COUNT; j++ )
 			{
@@ -1005,15 +1081,20 @@ void CStudioModelRenderer::StudioSetupBones( void )
 	}
 
 
-	for( i = 0; i < m_pStudioHeader->numbones; i++ )
+	for( i = 0; i < iNumbones; i++ )
 	{
+		int iParent = pbones[i].parent;
+
+		if( iParent >= iNumbones )
+			iParent = -1;
+
 		QuaternionMatrix( q[i], bonematrix );
 
 		bonematrix[0][3] = pos[i][0];
 		bonematrix[1][3] = pos[i][1];
 		bonematrix[2][3] = pos[i][2];
 
-		if( pbones[i].parent == -1 )
+		if( iParent == -1 )
 		{
 			if( IEngineStudio.IsHardware() )
 			{
@@ -1034,8 +1115,8 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		} 
 		else 
 		{
-			ConcatTransforms( (*m_pbonetransform)[pbones[i].parent], bonematrix, (*m_pbonetransform)[i] );
-			ConcatTransforms( (*m_plighttransform)[pbones[i].parent], bonematrix, (*m_plighttransform)[i] );
+			ConcatTransforms( (*m_pbonetransform)[iParent], bonematrix, (*m_pbonetransform)[i] );
+			ConcatTransforms( (*m_plighttransform)[iParent], bonematrix, (*m_plighttransform)[i] );
 		}
 	}
 }
@@ -1049,13 +1130,16 @@ StudioSaveBones
 void CStudioModelRenderer::StudioSaveBones( void )
 {
 	int i;
+	int iNumbones;
 
 	mstudiobone_t *pbones;
-	pbones = (mstudiobone_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->boneindex );
+	pbones = StudioGetBones();
 
-	m_nCachedBones = m_pStudioHeader->numbones;
+	iNumbones = StudioNumBones();
 
-	for( i = 0; i < m_pStudioHeader->numbones; i++ )
+	m_nCachedBones = iNumbones;
+
+	for( i = 0; i < iNumbones; i++ )
 	{
 		strcpy( m_nCachedBoneNames[i], pbones[i].name );
 		MatrixCopy( (*m_pbonetransform)[i], m_rgCachedBoneTransform[i] );
@@ -1074,6 +1158,7 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 	int i, j;
 	double f;
 	int do_hunt = true;
+	int iNumbones;
 
 	mstudiobone_t *pbones;
 	mstudioseqdesc_t *pseqdesc;
@@ -1082,6 +1167,8 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 	static float pos[MAXSTUDIOBONES][3];
 	float bonematrix[3][4];
 	static vec4_t q[MAXSTUDIOBONES];
+
+	iNumbones = StudioNumBones();
 
 	if( m_pCurrentEntity->curstate.sequence >=  m_pStudioHeader->numseq )
 	{
@@ -1100,10 +1187,15 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 	panim = StudioGetAnim( m_pSubModel, pseqdesc );
 	StudioCalcRotations( pos, q, pseqdesc, panim, f );
 
-	pbones = (mstudiobone_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->boneindex );
+	pbones = StudioGetBones();
 
-	for( i = 0; i < m_pStudioHeader->numbones; i++ )
+	for( i = 0; i < iNumbones; i++ )
 	{
+		int iParent = pbones[i].parent;
+
+		if( iParent >= iNumbones )
+			iParent = -1;
+
 		for( j = 0; j < m_nCachedBones; j++ )
 		{
 			if( stricmp( pbones[i].name, m_nCachedBoneNames[j] ) == 0 )
@@ -1121,7 +1213,7 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 			bonematrix[1][3] = pos[i][1];
 			bonematrix[2][3] = pos[i][2];
 
-			if( pbones[i].parent == -1 )
+			if( iParent == -1 )
 			{
 				if( IEngineStudio.IsHardware() )
 				{
@@ -1142,8 +1234,8 @@ void CStudioModelRenderer::StudioMergeBones( model_t *m_pSubModel )
 			} 
 			else 
 			{
-				ConcatTransforms( (*m_pbonetransform)[pbones[i].parent], bonematrix, (*m_pbonetransform)[i] );
-				ConcatTransforms( (*m_plighttransform)[pbones[i].parent], bonematrix, (*m_plighttransform)[i] );
+				ConcatTransforms( (*m_pbonetransform)[iParent], bonematrix, (*m_pbonetransform)[i] );
+				ConcatTransforms( (*m_plighttransform)[iParent], bonematrix, (*m_plighttransform)[i] );
 			}
 		}
 	}
