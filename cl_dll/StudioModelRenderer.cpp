@@ -387,29 +387,42 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 {
 	mstudioseqgroup_t *pseqgroup;
 	cache_user_t *paSequences;
+	int iSeqGroup;
 
-	pseqgroup = (mstudioseqgroup_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqgroupindex ) + pseqdesc->seqgroup;
+	iSeqGroup = pseqdesc->seqgroup;
 
-	if( pseqdesc->seqgroup == 0 )
+	if( iSeqGroup == 0 )
 	{
 		return (mstudioanim_t *)( (byte *)m_pStudioHeader + pseqdesc->animindex );
 	}
+
+	// Sequence-group index out of the valid cache array range (corrupt or
+	// oversized group number, e.g. from a bad studio header) used to index
+	// past the 16-entry cache_user_t array and SEGV inside the game DLL's
+	// engine Cache_Check. Fall back to the model's embedded animations.
+	if( iSeqGroup < 1 || iSeqGroup >= MAXSTUDIOGROUPS )
+	{
+		gEngfuncs.Con_DPrintf( "StudioGetAnim: seqgroup %d out of range, using group 0\n", iSeqGroup );
+		return (mstudioanim_t *)( (byte *)m_pStudioHeader + pseqdesc->animindex );
+	}
+
+	pseqgroup = (mstudioseqgroup_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqgroupindex ) + iSeqGroup;
 
 	paSequences = (cache_user_t *)m_pSubModel->submodels;
 
 	if( paSequences == NULL )
 	{
-		paSequences = (cache_user_t *)IEngineStudio.Mem_Calloc( 16, sizeof(cache_user_t) ); // UNDONE: leak!
+		paSequences = (cache_user_t *)IEngineStudio.Mem_Calloc( MAXSTUDIOGROUPS, sizeof(cache_user_t) ); // UNDONE: leak!
 		m_pSubModel->submodels = (dmodel_t *)paSequences;
 	}
 
-	if( !IEngineStudio.Cache_Check( (struct cache_user_s *)&( paSequences[pseqdesc->seqgroup] ) ) )
+	if( !IEngineStudio.Cache_Check( (struct cache_user_s *)&( paSequences[iSeqGroup] ) ) )
 	{
 		gEngfuncs.Con_DPrintf("loading %s\n", pseqgroup->name );
-		IEngineStudio.LoadCacheFile( pseqgroup->name, (struct cache_user_s *)&paSequences[pseqdesc->seqgroup] );
+		IEngineStudio.LoadCacheFile( pseqgroup->name, (struct cache_user_s *)&paSequences[iSeqGroup] );
 	}
 
-	return (mstudioanim_t *)( (byte *)paSequences[pseqdesc->seqgroup].data + pseqdesc->animindex );
+	return (mstudioanim_t *)( (byte *)paSequences[iSeqGroup].data + pseqdesc->animindex );
 }
 
 /*
