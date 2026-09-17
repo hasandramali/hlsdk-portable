@@ -517,7 +517,7 @@ int CHudAmmo::MsgFunc_AmmoPickup( const char *pszName, int iSize, void *pbuf )
 int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
-	int iIndex = READ_BYTE();
+	int iIndex = READ_SHORT();
 
 	// Add the weapon to the history
 	gHR.AddToHistory( HISTSLOT_WEAP, iIndex );
@@ -660,32 +660,23 @@ int CHudAmmo::MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf )
 
 strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 
-	// Sven Co-op server (server.dll:0x10202560, binary-verified) sends
-	// STRING + LONG(ammo1 idx) + LONG(max1) + BYTE(ammo2 idx) + BYTE(max2)
-	// + BYTE(slot) + SHORT(id) + BYTE(flags) -- not the vanilla byte order.
-	// The old CHAR/BYTE/.../CHAR read drifted by one LONG; fixing it aligns
-	// Weapon.iId with the id that CurWeapon sends, so gWR.GetWeapon() works.
-	Weapon.iAmmoType = (int)READ_LONG();
+	// Sven Co-op server (server.dll:0x10202560, binary-verified) writes
+	// WeaponList as STRING + BYTE(ammo1 idx) + LONG(ammo1 max) + BYTE(ammo2 idx)
+	// + LONG(ammo2 max) + BYTE(slot) + BYTE(pos) + SHORT(id) + BYTE(flags),
+	// which matches client.dll's reader (0x100046A0). The previous LONG+LONG read
+	// drifted the whole message so real weapon names never matched their ids
+	// and the menu showed auto-generated weapon_<id> fallbacks instead.
+	Weapon.iAmmoType = (int)READ_CHAR();
 
 	Weapon.iMax1 = READ_LONG();
 
-	Weapon.iAmmo2Type = (int)READ_BYTE();
-	Weapon.iMax2 = READ_BYTE();
+	Weapon.iAmmo2Type = (int)READ_CHAR();
+	Weapon.iMax2 = READ_LONG();
 	if( Weapon.iMax2 == 255 )
 		Weapon.iMax2 = -1;
 
-	Weapon.iSlot = READ_BYTE();
-
-	// Sven has no slot position in the wire; assign a per-slot ordinal so
-	// several weapons in one slot don't overwrite each other in rgSlots[].
-	Weapon.iSlotPos = 0;
-	for( int i = 0; i < MAX_WEAPONS; i++ )
-	{
-		if( gWR.GetWeapon( i )->iId && gWR.GetWeapon( i )->iSlot == Weapon.iSlot )
-			Weapon.iSlotPos++;
-	}
-	if( Weapon.iSlotPos >= MAX_WEAPON_POSITIONS )
-		Weapon.iSlotPos = MAX_WEAPON_POSITIONS - 1;
+	Weapon.iSlot = READ_CHAR();
+	Weapon.iSlotPos = READ_CHAR();
 
 	Weapon.iId = READ_SHORT();
 	Weapon.iFlags = READ_BYTE();

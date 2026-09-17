@@ -391,19 +391,34 @@ mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudi
 
 	iSeqGroup = pseqdesc->seqgroup;
 
-	if( iSeqGroup == 0 )
-	{
-		return (mstudioanim_t *)( (byte *)m_pStudioHeader + pseqdesc->animindex );
-	}
-
 	// Sequence-group index out of the valid cache array range (corrupt or
 	// oversized group number, e.g. from a bad studio header) used to index
 	// past the 16-entry cache_user_t array and SEGV inside the game DLL's
 	// engine Cache_Check. Fall back to the model's embedded animations.
-	if( iSeqGroup < 1 || iSeqGroup >= MAXSTUDIOGROUPS )
+	if( iSeqGroup != 0 && ( iSeqGroup < 1 || iSeqGroup >= MAXSTUDIOGROUPS ))
 	{
 		gEngfuncs.Con_DPrintf( "StudioGetAnim: seqgroup %d out of range, using group 0\n", iSeqGroup );
-		return (mstudioanim_t *)( (byte *)m_pStudioHeader + pseqdesc->animindex );
+		iSeqGroup = 0;
+	}
+
+	if( iSeqGroup == 0 )
+	{
+		int animindex = pseqdesc->animindex;
+		int bounds = m_pStudioHeader->length;
+
+		// Corrupt/truncated studio headers can carry an animindex far outside
+		// the loaded model block (the engine allocates the studio cache
+		// exactly phdr->length). Returning header+animindex then made callers
+		// SEGV reading panim past the mapping (observed seqgroup 0x6d041a17
+		// -> ~1.8 GB offset landed in an unmapped region). Degrade to the
+		// first embedded animation instead of crashing.
+		if( animindex < 0 || animindex >= bounds )
+		{
+			gEngfuncs.Con_DPrintf( "StudioGetAnim: animindex %d out of range (%d), using 0\n", animindex, bounds );
+			animindex = 0;
+		}
+
+		return (mstudioanim_t *)( (byte *)m_pStudioHeader + animindex );
 	}
 
 	pseqgroup = (mstudioseqgroup_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqgroupindex ) + iSeqGroup;
