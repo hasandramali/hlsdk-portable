@@ -713,7 +713,7 @@ void CHudAmmo::SlotInput( int iSlot )
 	if( gViewPort && gViewPort->SlotInput( iSlot ) )
 		return;
 #endif
-	gWR.SelectSlot(iSlot, FALSE, 1);
+	//gWR.SelectSlot(iSlot, FALSE, 1);	// FIXME: The Sven Co-op weapons need to be defined.
 }
 
 void CHudAmmo::UserCmd_Slot1( void )
