@@ -911,7 +911,10 @@ int CHudAmmo::Draw( float flTime )
 	y += gHUD.m_iHudNumbersYOffset; // a1ba: fix HL25 HUD vertical inconsistensy
 
 	// Does weapon have any ammo at all?
-	if( m_pWeapon->iAmmoType > 0 )
+	// NOTE: Sven numbers ammo types from 0 (binary-verified: the real client
+	// stores the raw BYTE index with no gate), so index 0 is a real type.
+	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
+	if( m_pWeapon->iAmmoType >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
 
@@ -955,7 +958,7 @@ int CHudAmmo::Draw( float flTime )
 	}
 
 	// Does weapon have seconday ammo?
-	if( pw->iAmmo2Type > 0 )
+	if( pw->iAmmo2Type >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo2.right - m_pWeapon->rcAmmo2.left;
 
