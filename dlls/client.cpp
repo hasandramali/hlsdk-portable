@@ -35,6 +35,7 @@
 #include "game.h"
 #include "customentity.h"
 #include "weapons.h"
+#include "sv_sndlog.h"
 #include "weaponinfo.h"
 #include "usercmd.h"
 #include "netadr.h"
@@ -718,6 +719,8 @@ void ServerDeactivate( void )
 
 	g_serveractive = 0;
 
+	SV_SndLog_OnDeactivate(); // fresh sound table for the next map
+
 	// Peform any shutdown operations here...
 	//
 }
@@ -756,6 +759,8 @@ void ServerActivate( edict_t *pEdictList, int edictCount, int clientMax )
 
 	// Link user messages here to make sure first client can get them...
 	LinkUserMessages();
+
+	SV_SndLog_OnActivate(); // entity precaches complete: dump sound table
 }
 
 /*
