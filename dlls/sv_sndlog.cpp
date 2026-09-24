@@ -77,13 +77,16 @@ static void SV_SndLog_WriteFile( void )
 	if( dot ) *dot = '\0';
 	if( !map[0] )
 		return;
-	sprintf( path, "%s/maps/soundcache/%s.txt", gamedir, map );
+	sprintf( path, "%s/maps/soundcache/local_%s.txt", gamedir, map );
 	f = fopen( path, "w" );
 	if( !f )
 	{
 		ALERT( at_console, "SV-SNDLOG: cannot write %s (create maps/soundcache/ first)\n", path );
 		return;
 	}
+	// NOTE: local_ prefix on purpose — never clobber the served
+	// maps/soundcache/<map>.txt. The client reads this file only when
+	// cl_sven_soundcache_source=1 (precache-hack source mode).
 	fprintf( f, "%s\nlocal\nSOUNDLIST {\n", map );
 	for( i = 0; i < svSndCount; i++ )
 		fprintf( f, "%s\n", svSndNames[i] );
