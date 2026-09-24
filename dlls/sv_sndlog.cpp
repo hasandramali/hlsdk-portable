@@ -113,10 +113,12 @@ void SV_SndLog_Install( void )
 }
 
 // Called at the end of ServerActivate: entity precaches are complete.
+// NOTE: never writes the file automatically — an automatic dump would
+// clobber a good served maps/soundcache/<map>.txt with a partial local
+// table. Dumping happens only via the sv_dumpsoundcache command.
 void SV_SndLog_OnActivate( void )
 {
-	ALERT( at_console, "SV-SNDLOG: map active, %d sounds recorded\n", svSndCount );
-	SV_SndLog_WriteFile();
+	ALERT( at_console, "SV-SNDLOG: map active, %d sounds recorded (sv_dumpsoundcache to write file)\n", svSndCount );
 }
 
 // Called from ServerDeactivate: fresh table for the next map.
