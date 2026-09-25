@@ -620,13 +620,16 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 
 	pWeapon->iClip = iClip;
 
-	// Sven servers carry the reserve count in CurWeapon.iAmmo (LONG, -1 =
-	// infinite). AmmoX alone leaves the slot stale on servers that update
-	// ammo through weapon state, so the HUD reserve (CountAmmo(iAmmoType))
-	// sat at 0 while reloads worked server-side. Mirror iAmmo into the
-	// weapon's ammo slot; harmless when AmmoX also updates it (same value).
-	if( pWeapon->iAmmoType >= 0 && pWeapon->iAmmoType < MAX_AMMO_TYPES && iAmmo >= 0 )
-		gWR.SetAmmo( pWeapon->iAmmoType, iAmmo );
+	// NOTE: CurWeapon.iAmmo is deliberately NOT mirrored into the reserve
+	// slot. Reverse + live wire proved it carries the SECONDARY count on
+	// dual-ammo weapons (akimbo second clip, M16 grenades), not the primary
+	// reserve — mirroring poisoned primary displays (akimbo 32/32, grenades
+	// over bullets). Primary reserve comes from AmmoX only. (git history has
+	// the removed mirror if this ever needs revisiting.)
+	// Dual-uzis only: iAmmo is the second gun's clip; store it separately so
+	// the HUD can show clip|clip2 with the shared reserve above.
+	if( iAmmo >= 0 && !strcmp( pWeapon->szName, "weapon_uziakimbo" ))
+		pWeapon->iClip2 = iAmmo;
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( iState == 0 )
@@ -692,6 +695,7 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	Weapon.iId = READ_SHORT();
 	Weapon.iFlags = READ_BYTE();
 	Weapon.iClip = 0;
+	Weapon.iClip2 = -1; // dual-uzi second clip, filled from CurWeapon.iAmmo
 
 	if( Weapon.iId < 0 || Weapon.iId >= MAX_WEAPONS )
 		return 0;
@@ -925,7 +929,30 @@ int CHudAmmo::Draw( float flTime )
 	// NOTE: Sven numbers ammo types from 0 (binary-verified: the real client
 	// stores the raw BYTE index with no gate), so index 0 is a real type.
 	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
-	if( m_pWeapon->iAmmoType >= 0 )
+	if( !strcmp( m_pWeapon->szName, "weapon_uziakimbo" ) && m_pWeapon->iClip2 >= 0 )
+	{
+		// Dual uzis: bottom row clip|clip2, shared reserve on the row above
+		// so the second clip never swallows it.
+		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
+		int iBarWidth = AmmoWidth / 10;
+		int iOffset;
+
+		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip, r, g, b );
+		x += AmmoWidth / 2;
+		UnpackRGB( r,g,b, RGB_BLUEISH );
+		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+		x += iBarWidth + AmmoWidth / 2;
+		ScaleColors( r, g, b, a );
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, m_pWeapon->iClip2, r, g, b );
+
+		y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
+		x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
+		iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
+		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
+	}
+	else if( m_pWeapon->iAmmoType >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
 

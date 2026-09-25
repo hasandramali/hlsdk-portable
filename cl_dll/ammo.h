@@ -34,6 +34,7 @@ struct WEAPON
 	int		iFlags;
 	int		iId;
 	int		iClip;
+	int		iClip2;		// second gun clip (dual uziakimbo only, -1 = n/a)
 
 	int		iCount;		// # of itesm in plist
 
