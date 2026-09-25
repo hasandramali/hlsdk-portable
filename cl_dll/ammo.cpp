@@ -489,25 +489,18 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
 
-	// Sven Co-op server (server.dll:0x10266EF0, binary-verified) writes
-	// AmmoX as three SHORTs: ammo index, current count, reserve. Vanilla
-	// was BYTE/BYTE, which drifted the ammo HUD.
-	int iIndex = READ_SHORT();
-	int iCount = READ_SHORT();
-	READ_SHORT(); // reserve/max, unused by the HUD
+	// Live-wire verified (AMMO-WIRE dump): the server sends 5 bytes,
+	// [BYTE idx][BYTE count] + 3 trailing bytes. The old 3-SHORT read
+	// straddled the byte boundary (idx 12801/4354 garbage) so the slot
+	// never updated and the reserve HUD sat at 0. Parse the leading
+	// bytes vanilla-style; the trailing bytes carry no HUD state.
+	if( iSize < 2 )
+		return 0;
+	int iIndex = READ_BYTE();
+	int iCount = READ_BYTE();
 
 	if( iIndex >= 0 && iIndex < MAX_AMMO_TYPES )
-		gWR.SetAmmo( iIndex, ( iCount < 0 ) ? -iCount : iCount );
-
-	// TEMP-DIAG (remove after reserve-ammo verdict): first 3 AmmoX values.
-	{
-		static int s_ammoxDbg = 0;
-		if( s_ammoxDbg < 3 )
-		{
-			s_ammoxDbg++;
-			gEngfuncs.Con_Printf( "CL-AMMO: AmmoX idx=%d count=%d\n", iIndex, iCount );
-		}
-	}
+		gWR.SetAmmo( iIndex, iCount );
 
 	return 1;
 }
@@ -634,17 +627,6 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	// weapon's ammo slot; harmless when AmmoX also updates it (same value).
 	if( pWeapon->iAmmoType >= 0 && pWeapon->iAmmoType < MAX_AMMO_TYPES && iAmmo >= 0 )
 		gWR.SetAmmo( pWeapon->iAmmoType, iAmmo );
-
-	// TEMP-DIAG (remove after reserve-ammo verdict): first 3 CurWeapon values.
-	{
-		static int s_curDbg = 0;
-		if( s_curDbg < 3 )
-		{
-			s_curDbg++;
-			gEngfuncs.Con_Printf( "CL-AMMO: CurWeapon id=%d slot=%d clip=%d reserve=%d\n",
-				iId, pWeapon->iAmmoType, iClip, iAmmo );
-		}
-	}
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( iState == 0 )
