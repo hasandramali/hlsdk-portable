@@ -617,6 +617,14 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 
 	pWeapon->iClip = iClip;
 
+	// Sven servers carry the reserve count in CurWeapon.iAmmo (LONG, -1 =
+	// infinite). AmmoX alone leaves the slot stale on servers that update
+	// ammo through weapon state, so the HUD reserve (CountAmmo(iAmmoType))
+	// sat at 0 while reloads worked server-side. Mirror iAmmo into the
+	// weapon's ammo slot; harmless when AmmoX also updates it (same value).
+	if( pWeapon->iAmmoType >= 0 && pWeapon->iAmmoType < MAX_AMMO_TYPES && iAmmo >= 0 )
+		gWR.SetAmmo( pWeapon->iAmmoType, iAmmo );
+
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( iState == 0 )
 		return 1;
