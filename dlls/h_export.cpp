@@ -22,7 +22,6 @@
 
 #include "extdll.h"
 #include "util.h"
-#include "sv_sndlog.h"
 
 #include "cbase.h"
 
@@ -54,5 +53,6 @@ extern "C" void DLLEXPORT EXPORT2 GiveFnptrsToDll( enginefuncs_t *pengfuncsFromE
 {
 	memcpy( &g_engfuncs, pengfuncsFromEngine, sizeof(enginefuncs_t) );
 	gpGlobals = pGlobals;
-	SV_SndLog_Install(); // Sven-style sound-table visibility (wrappers forward unchanged)
+	// FIXME (sound debugging shelved 2026-09-24): precache/emit logging
+	// wrappers + soundcache dump lived here (see git history).
 }

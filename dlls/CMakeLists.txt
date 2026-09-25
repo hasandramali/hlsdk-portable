@@ -132,7 +132,6 @@ set (SVDLL_SOURCES
 	squadmonster.cpp
 	squeakgrenade.cpp
 	subs.cpp
-	sv_sndlog.cpp
 	talkmonster.cpp
 	teamplay_gamerules.cpp
 	tempmonster.cpp

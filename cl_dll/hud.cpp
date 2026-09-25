@@ -23,7 +23,6 @@
 #include <string.h>
 #include <stdio.h>
 #include "parsemsg.h"
-#include "sven_snd.h"
 #if USE_VGUI
 #include "vgui_int.h"
 #include "vgui_TeamFortressViewport.h"
@@ -376,10 +375,27 @@ int __MsgFunc_AllowSpec( const char *pszName, int iSize, void *pbuf )
  
 int __MsgFunc_StartSound( const char *pszName, int iSize, void *pbuf )
 {
-	// Sven positional sound: resolved + optionally played by the cl_dll
-	// soundcache table (sven_snd.cpp). Playback ownership is shared with
-	// the engine via cl_sven_sndhandler (0 = engine plays, 1 = cl_dll).
-	SvenSnd_OnStartSound( pbuf, iSize );
+	BEGIN_READ( pbuf, iSize );
+
+	int flags = READ_SHORT();
+	int entindex = READ_SHORT();
+	int attn = READ_BYTE();
+	float offset = READ_FLOAT();
+	int channel = READ_BYTE();
+	int soundindex = READ_SHORT();
+
+	/*
+	m.WriteShort(int16(49172)); // ??? (flags, probably)
+	m.WriteShort(0);            // entity index
+	m.WriteByte(0);             // ??? (value doesn't seem to matter)
+	m.WriteFloat(5.234);        // offset in seconds
+	m.WriteByte(7);             // sound channel
+	m.WriteShort(711);          // sound index (subtract 4 from the line number in soundcache/mapname.txt)
+	*/
+
+	// FIXME (sound debugging shelved 2026-09-24): a real soundcache table
+	// resolver + test_sven_sound command lived here (see git history); the
+	// engine owns svc107 playback, this stays a read-and-discard stub.
 	return 0;
 }
 
@@ -461,8 +477,6 @@ void CHud::Init( void )
 	HOOK_MESSAGE( VGUIMenu );
 
 	HOOK_MESSAGE( StartSound );
-
-	gEngfuncs.pfnAddCommand( "test_sven_sound", SvenSnd_Test_f );
 
 	CVAR_CREATE( "hud_classautokill", "1", FCVAR_ARCHIVE | FCVAR_USERINFO );		// controls whether or not to suicide immediately on TF class switch
 	CVAR_CREATE( "hud_takesshots", "0", FCVAR_ARCHIVE );		// controls whether or not to automatically take screenshots at the end of a round
