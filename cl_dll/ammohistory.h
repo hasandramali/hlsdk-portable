@@ -58,12 +58,43 @@ public:
 
 	void PickupWeapon( WEAPON *wp )
 	{
-		rgSlots[wp->iSlot][wp->iSlotPos] = wp;
+		// Sven servers number slots 0..9+ (tall layout) but the vanilla menu
+		// draws buckets 0..4 and rgSlots has 6 rows. Fold higher slots into
+		// the last visible bucket and clamp positions: without this, exotic
+		// weapons (slot 6+) wrote past rgSlots into riAmmo, corrupting ammo
+		// counts into 99999-like values and hiding the weapons from the menu.
+		int b = wp->iSlot;
+		int p, k;
+		if( b < 0 ) b = 0;
+		if( b >= MAX_WEAPON_SLOTS ) b = MAX_WEAPON_SLOTS - 1;
+		p = wp->iSlotPos;
+		if( p < 0 ) p = 0;
+		if( p >= MAX_WEAPON_POSITIONS ) p = MAX_WEAPON_POSITIONS - 1;
+		for( k = 0; k < MAX_WEAPON_POSITIONS; k++ )
+		{
+			int c = ( p + k ) % MAX_WEAPON_POSITIONS;
+			if( !rgSlots[b][c] )
+			{
+				rgSlots[b][c] = wp;
+				return;
+			}
+		}
+		rgSlots[b][MAX_WEAPON_POSITIONS] = wp; // spill cell: in bounds, just not drawn
 	}
 
 	void DropWeapon( WEAPON *wp )
 	{
-		rgSlots[wp->iSlot][wp->iSlotPos] = NULL;
+		// Search the whole table: folded weapons no longer sit at their raw
+		// server indices, so blind indexing would leak them (and raw indices
+		// could overflow for high Sven slots).
+		for( int r = 0; r <= MAX_WEAPON_SLOTS; r++ )
+		{
+			for( int c = 0; c <= MAX_WEAPON_POSITIONS; c++ )
+			{
+				if( rgSlots[r][c] == wp )
+					rgSlots[r][c] = NULL;
+			}
+		}
 	}
 
 	void DropAllWeapons( void )
