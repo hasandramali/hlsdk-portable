@@ -499,6 +499,16 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 	if( iIndex >= 0 && iIndex < MAX_AMMO_TYPES )
 		gWR.SetAmmo( iIndex, ( iCount < 0 ) ? -iCount : iCount );
 
+	// TEMP-DIAG (remove after reserve-ammo verdict): first 3 AmmoX values.
+	{
+		static int s_ammoxDbg = 0;
+		if( s_ammoxDbg < 3 )
+		{
+			s_ammoxDbg++;
+			gEngfuncs.Con_Printf( "CL-AMMO: AmmoX idx=%d count=%d\n", iIndex, iCount );
+		}
+	}
+
 	return 1;
 }
 
@@ -624,6 +634,17 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	// weapon's ammo slot; harmless when AmmoX also updates it (same value).
 	if( pWeapon->iAmmoType >= 0 && pWeapon->iAmmoType < MAX_AMMO_TYPES && iAmmo >= 0 )
 		gWR.SetAmmo( pWeapon->iAmmoType, iAmmo );
+
+	// TEMP-DIAG (remove after reserve-ammo verdict): first 3 CurWeapon values.
+	{
+		static int s_curDbg = 0;
+		if( s_curDbg < 3 )
+		{
+			s_curDbg++;
+			gEngfuncs.Con_Printf( "CL-AMMO: CurWeapon id=%d slot=%d clip=%d reserve=%d\n",
+				iId, pWeapon->iAmmoType, iClip, iAmmo );
+		}
+	}
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( iState == 0 )
