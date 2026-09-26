@@ -870,6 +870,13 @@ void EV_FireGauss( event_args_t *args )
 		return;
 	}
 
+	// proedu: firing ends the charge — kill any lingering spin loop here too.
+	// A long +attack2 hold and release (full-power fire) doesn't always get a
+	// trailing gaussspin stop event from the server, only the fire event, which
+	// would leave the pulsemachine loop turned on forever (quick taps only
+	// "fixed" it because they take the bparam2 stop path above).
+gEngfuncs.pEventAPI->EV_StopSound( idx, CHAN_WEAPON, "ambience/pulsemachine.wav" );
+
 	//Con_Printf( "Firing gauss with %f\n", flDamage );
 	EV_GetGunPosition( args, vecSrc, origin );
 

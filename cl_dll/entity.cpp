@@ -45,6 +45,46 @@ HUD_AddEntity
 	Return 0 to filter entity from visible list for rendering
 ========================
 */
+/*
+=======================
+SporeGlowSprite (proedu)
+
+Opposing Force's CSpore attaches a sprites/glow01.spr sprite to the
+sporelauncher projectile (kRenderTransAdd, RGB 180/180/40, renderamt 100,
+kRenderFxDistort, scale 0.8 — gearbox/sporegrenade.cpp). Sven's server doesn't
+send that attachment, so recreate it per frame as a short-lived additive sprite
+tempent at the entity origin. Die = 0.1s keeps the pool tiny; a brand new tempent
+is issued each rendered frame so there are no dangling pointers to reuse.
+=======================
+*/
+static struct model_s *sporeGlowModel = NULL;
+
+static void SporeGlowSprite( const struct cl_entity_s *ent )
+{
+	TEMPENTITY *t;
+	int unused;
+	float curtime = gEngfuncs.GetClientTime();
+
+	if( !sporeGlowModel )
+		sporeGlowModel = gEngfuncs.CL_LoadModel( (char *)"sprites/glow01.spr", &unused );
+
+	if( !sporeGlowModel || !ent )
+		return;
+
+	t = gEngfuncs.pEfxAPI->CL_TentEntAllocCustom( (float *)&ent->origin, sporeGlowModel, 0, NULL );
+	if( !t )
+		return;
+
+	t->entity.curstate.rendermode = kRenderTransAdd;
+	t->entity.curstate.renderamt = 100;
+	t->entity.curstate.rendercolor.r = 180;
+	t->entity.curstate.rendercolor.g = 180;
+	t->entity.curstate.rendercolor.b = 40;
+	t->entity.curstate.renderfx = kRenderFxDistort;
+	t->entity.curstate.scale = 0.8f;
+	t->die = curtime + 0.1f;
+}
+
 int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *modelname )
 {
 	switch( type )
@@ -66,18 +106,8 @@ int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *mode
 		if( slash && slash[1] )
 			base = slash + 1;
 
-		if( !strcmp( base, "spore.mdl" ) && ent->curstate.rendermode == kRenderNormal )
-		{
-			// Sven doesn't send the OpFor glow attachment (glow01.spr) for the
-			// sporelauncher projectile, so replicate it client-side: additive
-			// yellowish shell that pulses (kRenderFxGlowShell drives the flicker).
-			ent->curstate.rendermode = kRenderGlow;
-			ent->curstate.renderfx = kRenderFxGlowShell;
-			ent->curstate.renderamt = 180;
-			ent->curstate.rendercolor.r = 180;
-			ent->curstate.rendercolor.g = 180;
-			ent->curstate.rendercolor.b = 40;
-		}
+		if( !strcmp( base, "spore.mdl" ) )
+			SporeGlowSprite( ent ); // spawn/flicker its glow01.spr like OpFor does
 	}
 	// each frame every entity passes this function, so the overview hooks it to filter the overview entities
 	// in spectator mode:

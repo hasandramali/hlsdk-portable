@@ -52,7 +52,7 @@ void WeaponsResource::LoadAllWeaponSprites( void )
 
 int WeaponsResource::CountAmmo( int iId ) 
 { 
-	if( iId < 0 )
+	if( iId < 0 || iId >= MAX_AMMO_TYPES )
 		return 0;
 
 	return riAmmo[iId];
@@ -638,11 +638,15 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	// TEMP-DIAG (dual-uzi HUD): while the akimbo second-clip wire source is
 	// being confirmed, dump what the server actually sends for the akimbo so
 	// a single test run settles it. Remove with the iClip2 work.
+	// Sven minigun (id 21) is included: its reserve index is expected > 31 so
+	// we can confirm the wire values against gWR's (now 256-wide) AmmoX counts.
 	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0
-		&& strstr( pWeapon->szName, "uziakimbo" ))
+		&& ( strstr( pWeapon->szName, "uziakimbo" ) || iId == 21 ))
 	{
-		gEngfuncs.Con_Printf( "TEMP-DIAG CurWeapon name=%s id=%d state=%d clip=%d iAmmo=%d iClip2=%d\n",
-			pWeapon->szName, iId, iState, iClip, iAmmo, pWeapon->iClip2 );
+		gEngfuncs.Con_Printf( "TEMP-DIAG CurWeapon name=%s id=%d state=%d clip=%d iAmmo=%d iClip2=%d ammoT=%d count=%d ammo2T=%d count2=%d\n",
+			pWeapon->szName, iId, iState, iClip, iAmmo, pWeapon->iClip2,
+			pWeapon->iAmmoType, gWR.CountAmmo( pWeapon->iAmmoType ),
+			pWeapon->iAmmo2Type, gWR.CountAmmo( pWeapon->iAmmo2Type ));
 	}
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
@@ -695,10 +699,14 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	// drifted the whole message so real weapon names never matched their ids
 	// and the menu showed auto-generated weapon_<id> fallbacks instead.
 	Weapon.iAmmoType = (int)READ_CHAR();
+	if( Weapon.iAmmoType < 0 )
+		Weapon.iAmmoType += 256; // Sven reads ammo idx as unsigned byte (client.dll 0x100046A0)
 
 	Weapon.iMax1 = READ_LONG();
 
 	Weapon.iAmmo2Type = (int)READ_CHAR();
+	if( Weapon.iAmmo2Type < 0 )
+		Weapon.iAmmo2Type += 256;
 	Weapon.iMax2 = READ_LONG();
 	if( Weapon.iMax2 == 255 )
 		Weapon.iMax2 = -1;
@@ -727,6 +735,15 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 		return 0;*/
 
 	gWR.AddWeapon( &Weapon );
+
+	// TEMP-DIAG (minigun reserve): confirm the ammo types WeaponList carries
+	// for id 21 so the reserve misses are traceable against the widen-to-256.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0 )
+	{
+		gEngfuncs.Con_Printf( "TEMP-DIAG WeaponList name=%s id=%d ammoT=%d max1=%d ammo2T=%d max2=%d\n",
+			Weapon.szName, Weapon.iId, Weapon.iAmmoType, Weapon.iMax1,
+			Weapon.iAmmo2Type, Weapon.iMax2 );
+	}
 
 	return 1;
 }
