@@ -93,13 +93,13 @@ void Game_HookEvents( void )
 	gEngfuncs.pfnHookEvent( "events/uziakimbo.sc", EV_FireUziakimbo );
 	gEngfuncs.pfnHookEvent( "events/m16a2.sc", EV_FireM16A2 );
 	gEngfuncs.pfnHookEvent( "events/displacer.sc", EV_Displacer );
-	gEngfuncs.pfnHookEvent( "events/eagle.sc", EV_FireEagle );
+	gEngfuncs.pfnHookEvent( "events/deagle.sc", EV_FireEagle );
 	gEngfuncs.pfnHookEvent( "events/knife.sc", EV_Knife );
 	gEngfuncs.pfnHookEvent( "events/m249.sc", EV_FireM249 );
 	gEngfuncs.pfnHookEvent( "events/penguinfire.sc", EV_PenguinFire );
 	gEngfuncs.pfnHookEvent( "events/pipewrench.sc", EV_PipeWrench );
-	gEngfuncs.pfnHookEvent( "events/shock.sc", EV_ShockFire );
-	gEngfuncs.pfnHookEvent( "events/sniper.sc", EV_FireSniper );
+	gEngfuncs.pfnHookEvent( "events/shockrifle.sc", EV_ShockFire );
+	gEngfuncs.pfnHookEvent( "events/sniperrifle.sc", EV_FireSniper );
 	gEngfuncs.pfnHookEvent( "events/spore.sc", EV_SporeFire );
 	gEngfuncs.pfnHookEvent( "events/vehicle.sc", EV_VehiclePitchAdjust );
 }

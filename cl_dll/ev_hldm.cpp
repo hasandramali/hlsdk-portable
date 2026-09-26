@@ -1849,19 +1849,14 @@ enum displacer_e
 
 void EV_Displacer( event_args_t *args )
 {
-	int idx;
-	vec3_t origin;
-
-	idx = args->entindex;
-	VectorCopy( args->origin, origin );
-
-	if( EV_IsLocal( idx ) )
-	{
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( DISPLACER_FIRE, 0 );
-		V_PunchAxis( 0, -2.0 );
-	}	
-
-	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/displacer_fire.wav", 1, ATTN_NORM, 0, PITCH_NORM );
+	// Stock events/displacer.sc only draws the lightning beam
+	// (sprites/lgtning.spr) from muzzle toward the teleport target; the fire
+	// animation and sound are driven server-side (svc_weaponanim / svc_sound).
+	// The opfor anim constants we used before belonged to a different viewmodel
+	// and broke the Sven animation, so the event is visual-only for now.
+	// TODO: mirror the beam from stock client.dll 0x100254e0 (needs an engine
+	// R_BeamPoints export).
+	( void )args;
 }
 //======================
 //	    DISPLACER END 
@@ -1895,9 +1890,11 @@ void EV_FireEagle( event_args_t *args )
 	vec3_t angles;
 	vec3_t velocity;
 
+	vec3_t ShellVelocity;
+	vec3_t ShellOrigin;
+	int shell;
 	vec3_t vecSrc, vecAiming;
 	vec3_t up, right, forward;
-	float flSpread = 0.01;
 
 	idx = args->entindex;
 	VectorCopy( args->origin, origin );
@@ -1906,17 +1903,22 @@ void EV_FireEagle( event_args_t *args )
 
 	AngleVectors( angles, forward, right, up );
 
+	shell = gEngfuncs.pEventAPI->EV_FindModelIndex( "models/shell.mdl" );// brass shell
+
 	if( EV_IsLocal( idx ) )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( EAGLE_SHOOT, 0 );
-
-		V_PunchAxis( 0, -4.0 );
+		// Stock (events/deagle.sc reverse): sequence = 5 + (mag empty != 0), body = 2.
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( ( args->bparam1 != 0 ) ? 6 : 5, 2 );
 	}
 
-	// Play fire sound.
-	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/desert_eagle_fire.wav", gEngfuncs.pfnRandomFloat(0.8, 0.9), ATTN_NORM, 0, PITCH_NORM );
+	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 18, -18, 12 );
+
+	EV_EjectBrass( ShellOrigin, ShellVelocity, angles[YAW], shell, TE_BOUNCE_SHELL );
+
+	// Play fire sound (stock: de_shot1.wav, vol 0.8-0.9, atten 0.8, pitch 0x62 + RandomLong(0,3)).
+	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/de_shot1.wav", gEngfuncs.pfnRandomFloat( 0.8, 0.9 ), ATTN_NORM, 0, 0x62 + gEngfuncs.pfnRandomLong( 0, 3 ) );
 
 	EV_GetGunPosition( args, vecSrc, origin );
 
@@ -2045,8 +2047,8 @@ void EV_FireM249( event_args_t *args )
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( M249_SHOOT1 + gEngfuncs.pfnRandomLong( 0, 2 ), args->iparam2 );
-
-		V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
+		// Stock (events/m249.sc reverse) has NO view punch for the m249 - the
+		// recoil is purely the viewmodel animation, so do not V_PunchAxis here.
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
@@ -2346,8 +2348,8 @@ void EV_FireSniper( event_args_t *args )
 		V_PunchAxis( 0, -5.0 );
 	}
 
-	// Play fire sound.
-	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/sniper_fire.wav", 1.0f, ATTN_NORM, 0, PITCH_NORM );
+	// Play fire sound (stock: sniper_fire.wav, pitch 0x62 + RandomLong(0,3)).
+	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/sniper_fire.wav", 1.0f, ATTN_NORM, 0, 0x62 + gEngfuncs.pfnRandomLong( 0, 3 ) );
 
 	EV_GetGunPosition( args, vecSrc, origin );
 
@@ -2503,9 +2505,10 @@ void EV_FireUzi( event_args_t *args )
 //======================
 //	   UZIAKIMBO START (Sven stock: events/uziakimbo.sc)
 //======================
-// Stock client (client.dll binary reverse): anim comes from args->iparam2
-// with body 2; iparam2 >= 15 means both guns (fire_both1/2 + 2 bullets),
-// below that a single gun (shoot1..3 + 1 bullet, like the single uzi).
+// Stock client (client.dll binary reverse): anim comes from args->iparam1
+// with body 2; iparam1 >= 15 means both guns (fire_both1/2 + 2 bullets),
+// otherwise a single gun (shoot2/3 + 1 bullet). iparam1 is the viewmodel
+// sequence the server selected, so pass it through untouched.
 void EV_FireUziakimbo( event_args_t *args )
 {
 	int idx;
@@ -2533,14 +2536,14 @@ void EV_FireUziakimbo( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( args->iparam2, 2 );
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( args->iparam1, 2 );
 
 		V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
 
-	both = ( args->iparam2 >= 15 ) ? 1 : 0;
+	both = ( args->iparam1 >= 15 ) ? 1 : 0;
 
 	EV_EjectBrass( ShellOrigin, ShellVelocity, angles[YAW], shell, TE_BOUNCE_SHELL );
 	if( both )
@@ -2555,18 +2558,11 @@ void EV_FireUziakimbo( event_args_t *args )
 	}
 	else
 	{
-		switch( gEngfuncs.pfnRandomLong( 0, 2 ) )
-		{
-		case 0:
-			gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/uzi/shoot1.wav", 1, ATTN_NORM, 0, 94 + gEngfuncs.pfnRandomLong( 0, 0xf ) );
-			break;
-		case 1:
+		// stock single-gun variant picks shoot3 (RandomLong==0) or shoot2.
+		if( gEngfuncs.pfnRandomLong( 0, 1 ) )
 			gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/uzi/shoot2.wav", 1, ATTN_NORM, 0, 94 + gEngfuncs.pfnRandomLong( 0, 0xf ) );
-			break;
-		default:
+		else
 			gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/uzi/shoot3.wav", 1, ATTN_NORM, 0, 94 + gEngfuncs.pfnRandomLong( 0, 0xf ) );
-			break;
-		}
 	}
 
 	EV_GetGunPosition( args, vecSrc, origin );
