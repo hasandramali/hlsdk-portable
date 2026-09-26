@@ -489,18 +489,22 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
 
-	// Live-wire verified (AMMO-WIRE dump): the server sends 5 bytes,
-	// [BYTE idx][BYTE count] + 3 trailing bytes. The old 3-SHORT read
-	// straddled the byte boundary (idx 12801/4354 garbage) so the slot
-	// never updated and the reserve HUD sat at 0. Parse the leading
-	// bytes vanilla-style; the trailing bytes carry no HUD state.
-	if( iSize < 2 )
+	// Sven server.dll writes [BYTE ammo type][LONG count] (regsize 5); the
+	// stock client reads the count as a signed LONG and stores abs(). Our old
+	// BYTE/BYTE read truncated to the low byte, so modded servers that push
+	// big reserves (e.g. 10000) displayed the low byte (16). Read the full
+	// LONG so values up to 2^31-1 survive into the HUD.
+	if( iSize < 5 )
 		return 0;
 	int iIndex = READ_BYTE();
-	int iCount = READ_BYTE();
+	int iCount = READ_LONG();
 
 	if( iIndex >= 0 && iIndex < MAX_AMMO_TYPES )
-		gWR.SetAmmo( iIndex, iCount );
+		gWR.SetAmmo( iIndex, abs( iCount ) );
+
+	// TEMP-DIAG (dual-uzi HUD): confirm the LONG count arrives intact.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0 )
+		gEngfuncs.Con_Printf( "TEMP-DIAG AmmoX idx=%d count=%d\n", iIndex, iCount );
 
 	return 1;
 }
@@ -630,6 +634,16 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	// the HUD can show clip|clip2 with the shared reserve above.
 	if( iAmmo >= 0 && !strcmp( pWeapon->szName, "weapon_uziakimbo" ))
 		pWeapon->iClip2 = iAmmo;
+
+	// TEMP-DIAG (dual-uzi HUD): while the akimbo second-clip wire source is
+	// being confirmed, dump what the server actually sends for the akimbo so
+	// a single test run settles it. Remove with the iClip2 work.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0
+		&& strstr( pWeapon->szName, "uziakimbo" ))
+	{
+		gEngfuncs.Con_Printf( "TEMP-DIAG CurWeapon name=%s id=%d state=%d clip=%d iAmmo=%d iClip2=%d\n",
+			pWeapon->szName, iId, iState, iClip, iAmmo, pWeapon->iClip2 );
+	}
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( iState == 0 )
@@ -931,11 +945,11 @@ int CHudAmmo::Draw( float flTime )
 	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
 	if( !strcmp( m_pWeapon->szName, "weapon_uziakimbo" ) && m_pWeapon->iClip2 >= 0 )
 	{
-		// Dual uzis: bottom row clip|clip2, shared reserve on the row above
-		// so the second clip never swallows it.
+		// Dual uzis (user mockup): second gun's clip on its own row ABOVE the
+		// ordinary clip | reserve row, e.g. "32" on top, "32 / 150" below.
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
 		int iBarWidth = AmmoWidth / 10;
-		int iOffset;
+		int iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
 
 		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
 		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip, r, g, b );
@@ -944,13 +958,12 @@ int CHudAmmo::Draw( float flTime )
 		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
 		x += iBarWidth + AmmoWidth / 2;
 		ScaleColors( r, g, b, a );
-		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, m_pWeapon->iClip2, r, g, b );
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
+		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
 
 		y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
-		x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
-		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
-		iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
-		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
+		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
+		gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, m_pWeapon->iClip2, r, g, b );
 	}
 	else if( m_pWeapon->iAmmoType >= 0 )
 	{

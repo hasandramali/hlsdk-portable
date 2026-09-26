@@ -45,6 +45,7 @@ cvar_t	*cl_laddermode;
 
 int CL_IsDead( void );
 extern Vector dead_viewangles;
+extern int g_iAlive;	// set by entity.cpp from iuser1/deadflag (1 when spectating)
 
 /*
 ===========
@@ -182,7 +183,7 @@ void FWGSInput::IN_Move( float frametime, usercmd_t *cmd )
 		V_StopPitchDrift();
 	}
 #endif
-	if( CL_IsDead() )
+	if( CL_IsDead() && !g_iAlive )
 	{
 		viewangles = dead_viewangles; // HACKHACK: see below
 	}
@@ -214,7 +215,10 @@ void FWGSInput::IN_Move( float frametime, usercmd_t *cmd )
 	
 	// HACKHACK: change viewangles directly in viewcode, 
 	// so viewangles when player is dead will not be changed on server
-	if( !CL_IsDead() )
+	// EXCEPT when spectating (g_iAlive, i.e. the server set iuser1): the
+	// Sven spectator camera turns from cl.cmd, so without this push a
+	// spectator can never free-look with the mouse.
+	if( !CL_IsDead() || g_iAlive || gEngfuncs.IsSpectateOnly() )
 	{
 		gEngfuncs.SetViewAngles( viewangles );
 	}

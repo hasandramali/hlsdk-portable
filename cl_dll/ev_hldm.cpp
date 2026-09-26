@@ -808,7 +808,13 @@ void EV_SpinGauss( event_args_t *args )
 
 	pitch = args->iparam1;
 
-	iSoundState = args->bparam1 ? SND_CHANGE_PITCH : 0;
+	// Stock sven client (gaussspin.sc, 0x1001d6f0) folds the byte param into a
+	// stop marker: bparam1 nonzero keeps looping, bparam1 zero MUST stop the
+	// looped spin. Our old guess used SND_CHANGE_PITCH for bparam1 and never
+	// stopped, so a long +attack2 hold left the spin looping forever (only a
+	// fast tap fired gauss.sc, whose bparam2 path stopped it). Map bparam1/bparam2
+	// to SND_STOP (1<<5) so any zero-cancel sent by the server kills the loop.
+	iSoundState = args->bparam1 ? 0 : SND_STOP;
 	iSoundState = args->bparam2 ? SND_STOP : iSoundState;
 
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "ambience/pulsemachine.wav", 1.0, ATTN_NORM, iSoundState, pitch );
@@ -877,7 +883,7 @@ void EV_FireGauss( event_args_t *args )
 	if( EV_IsLocal( idx ) )
 	{
 		V_PunchAxis( 0.0f, -2.0f );
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( GAUSS_FIRE2, 0 );
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( GAUSS_FIRE2, 2 );
 
 		if( m_fPrimaryFire == false )
 			 g_flApplyVel = flDamage; 

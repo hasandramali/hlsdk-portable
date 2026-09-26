@@ -134,6 +134,7 @@ extern kbutton_t in_jlook;
 
 extern cvar_t *m_pitch;
 extern cvar_t *m_yaw;
+extern int g_iAlive;	// set by entity.cpp from iuser1/deadflag (1 when spectating)
 extern cvar_t *m_forward;
 extern cvar_t *m_side;
 
@@ -835,7 +836,7 @@ void GoldSourceInput::IN_MouseMove ( float frametime, usercmd_t *cmd)
 	if( gHUD.m_iIntermission )
 		return; // we can't move during intermission
 
-	if( CL_IsDead() )
+	if( CL_IsDead() && !g_iAlive )
 	{
 		viewangles = dead_viewangles; // HACKHACK: see below
 	}
@@ -906,7 +907,10 @@ void GoldSourceInput::IN_MouseMove ( float frametime, usercmd_t *cmd)
 
 	// HACKHACK: change viewangles directly in viewcode,
 	// so viewangles when player is dead will not be changed on server
-	if( !CL_IsDead() )
+	// EXCEPT when spectating (g_iAlive, i.e. the server set iuser1): the
+	// Sven spectator camera turns from cl.cmd, so without this push a
+	// spectator can never free-look with the mouse.
+	if( !CL_IsDead() || g_iAlive || gEngfuncs.IsSpectateOnly() )
 	{
 		gEngfuncs.SetViewAngles( viewangles );
 	}
