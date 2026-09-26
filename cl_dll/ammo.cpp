@@ -945,25 +945,38 @@ int CHudAmmo::Draw( float flTime )
 	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
 	if( !strcmp( m_pWeapon->szName, "weapon_uziakimbo" ) && m_pWeapon->iClip2 >= 0 )
 	{
-		// Dual uzis (user mockup): second gun's clip on its own row ABOVE the
-		// ordinary clip | reserve row, e.g. "32" on top, "32 / 150" below.
+		// Dual uzis (Sven-style): one compact row right-aligned, clip1 | clip2 
+		// followed by the reserve, e.g. "32 | 32 / 150". Both clips come from
+		// the server's CurWeapon fields (iClip / iAmmo), reserve from iAmmoType.
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
 		int iBarWidth = AmmoWidth / 10;
 		int iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
+		int digits1 = 1, digits2 = 1;
+		float fRight;
 
+		for( int n = Q_max( pw->iClip, 0 ); n >= 10; n /= 10 ) digits1++;
+		for( int n = m_pWeapon->iClip2; n >= 10; n /= 10 ) digits2++;
+
+		// Reserve (3 digits) + icon, right-anchored same as the single-clip row
 		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
-		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip, r, g, b );
-		x += AmmoWidth / 2;
-		UnpackRGB( r,g,b, RGB_BLUEISH );
-		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
-		x += iBarWidth + AmmoWidth / 2;
-		ScaleColors( r, g, b, a );
 		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
 		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
 
-		y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
-		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
-		gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, m_pWeapon->iClip2, r, g, b );
+		// clip2 | just left of the reserve
+		x -= AmmoWidth / 2 + iBarWidth;
+		UnpackRGB( r, g, b, RGB_BLUEISH );
+		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+		ScaleColors( r, g, b, a );
+		fRight = x - AmmoWidth / 2;
+		gHUD.DrawHudNumber( (int)fRight - digits2 * AmmoWidth, y, iFlags, m_pWeapon->iClip2, r, g, b );
+
+		// clip1 | just left of clip2
+		x = (int)fRight - digits2 * AmmoWidth - AmmoWidth / 2 - iBarWidth;
+		UnpackRGB( r, g, b, RGB_BLUEISH );
+		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+		ScaleColors( r, g, b, a );
+		fRight = x - AmmoWidth / 2;
+		gHUD.DrawHudNumber( (int)fRight - digits1 * AmmoWidth, y, iFlags, pw->iClip, r, g, b );
 	}
 	else if( m_pWeapon->iAmmoType >= 0 )
 	{

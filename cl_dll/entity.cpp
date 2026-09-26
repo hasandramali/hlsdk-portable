@@ -8,6 +8,7 @@
 // Client side entity management functions
 
 #include <memory.h>
+#include <string.h>
 
 #include "hud.h"
 #include "cl_util.h"
@@ -55,6 +56,28 @@ int DLLEXPORT HUD_AddEntity( int type, struct cl_entity_s *ent, const char *mode
 	case ET_FRAGMENTED:
 	default:
 		break;
+	}
+
+	if( type == ET_NORMAL && ent && modelname )
+	{
+		const char *base = modelname;
+		const char *slash = strrchr( modelname, '/' );
+
+		if( slash && slash[1] )
+			base = slash + 1;
+
+		if( !strcmp( base, "spore.mdl" ) && ent->curstate.rendermode == kRenderNormal )
+		{
+			// Sven doesn't send the OpFor glow attachment (glow01.spr) for the
+			// sporelauncher projectile, so replicate it client-side: additive
+			// yellowish shell that pulses (kRenderFxGlowShell drives the flicker).
+			ent->curstate.rendermode = kRenderGlow;
+			ent->curstate.renderfx = kRenderFxGlowShell;
+			ent->curstate.renderamt = 180;
+			ent->curstate.rendercolor.r = 180;
+			ent->curstate.rendercolor.g = 180;
+			ent->curstate.rendercolor.b = 40;
+		}
 	}
 	// each frame every entity passes this function, so the overview hooks it to filter the overview entities
 	// in spectator mode:
