@@ -78,6 +78,7 @@ void EV_FireM249( struct event_args_s *args );
 void EV_PenguinFire( struct event_args_s *args );
 void EV_PipeWrench( struct event_args_s *args );
 void EV_ShockFire( struct event_args_s *args );
+void EV_ShockBeam( struct event_args_s *args );
 void EV_FireSniper( struct event_args_s *args );
 void EV_SporeFire( struct event_args_s *args );
 
@@ -2243,6 +2244,53 @@ enum shockrifle_e
 	SHOCK_HOLSTER,
 	SHOCK_IDLE3
 };
+
+// Sven secondary fire: four attachment beams with a shared target when a
+// trace hits a moving actor. This is a separate event from shockrifle.sc.
+void EV_ShockBeam( event_args_t *args )
+{
+	const float spread[4][3] = {{1, 0, 0}, {0.995f, -0.0995f, 0},
+		{0.995f, 0.0995f, 0}, {0.995f, 0, 0.0995f}};
+	vec3_t source, forward, right, up;
+	pmtrace_t traces[4];
+	bool actor[4];
+	int target = -1;
+	EV_GetGunPosition( args, source, args->origin );
+	AngleVectors( args->angles, forward, right, up );
+	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
+	gEngfuncs.pEventAPI->EV_PushPMStates();
+	gEngfuncs.pEventAPI->EV_SetSolidPlayers( args->entindex - 1 );
+	gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+	for( int i = 0; i < 4; ++i )
+	{
+		vec3_t end;
+		for( int axis = 0; axis < 3; ++axis )
+			end[axis] = source[axis] + 1024 * (forward[axis] * spread[i][0] + right[axis] * spread[i][1] + up[axis] * spread[i][2]);
+		gEngfuncs.pEventAPI->EV_PlayerTrace( source, end, PM_STUDIO_BOX, -1, &traces[i] );
+		physent_t *hit = gEngfuncs.pEventAPI->EV_GetPhysent( traces[i].ent );
+		actor[i] = !traces[i].allsolid && traces[i].fraction < 1 && hit &&
+			(hit->movetype == MOVETYPE_WALK || hit->movetype == MOVETYPE_STEP);
+		if( actor[i] && (target < 0 || traces[i].fraction < traces[target].fraction) ) target = i;
+	}
+	int model = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/lgtning.spr" );
+	for( int i = 0; i < 4; ++i )
+	{
+		pmtrace_t *hit = &traces[target >= 0 && !actor[i] ? target : i];
+		if( target < 0 )
+		{
+			vec3_t end;
+			float x = spread[i][0] + gEngfuncs.pfnRandomFloat(-0.1f, 0.1f);
+			float y = spread[i][1] + gEngfuncs.pfnRandomFloat(-0.1f, 0.1f);
+			float z = spread[i][2] + gEngfuncs.pfnRandomFloat(-0.1f, 0.1f);
+			for( int axis = 0; axis < 3; ++axis )
+				end[axis] = source[axis] + 1024 * (forward[axis] * x + right[axis] * y + up[axis] * z);
+			gEngfuncs.pEventAPI->EV_PlayerTrace( source, end, PM_STUDIO_BOX, -1, hit );
+		}
+		if( model ) gEngfuncs.pEfxAPI->R_BeamEntPoint( args->entindex | ((i + 1) << 12),
+			hit->endpos, model, 0.05f, 5, 0.25f, 1, 5, 0, 0, 96.0f/255, 180.0f/255, 1 );
+	}
+	gEngfuncs.pEventAPI->EV_PopPMStates();
+}
 
 void EV_ShockFire( event_args_t *args )
 {

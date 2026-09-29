@@ -85,9 +85,10 @@ public:
 	// reading the header itself, which is in-block and stable).
 	mstudiobone_t *StudioGetBones( void );
 
-	// Validate an mstudioanim_t-relative offset so the derived pointer stays
-	// inside the embedded model block; 0 means "use bone default" to callers.
-	int StudioSafeAnimOffset( mstudioanim_t *panim, int off );
+	// Read a bounded RLE channel from the active embedded/external group.
+	float StudioAnimValue( mstudioanim_t *anim, int channel, int frame );
+	byte *m_pAnimData;
+	int m_iAnimDataSize;
 
 	// Send bones and verts to renderer
 	virtual void StudioRenderModel( void );

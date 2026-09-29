@@ -1033,6 +1033,10 @@ be ignored
 */
 void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s *to, struct usercmd_s *cmd, int runfuncs, double time, unsigned int random_seed )
 {
+	// Native Sven predicts this movement restriction even with cl_lw=0.
+	// client.dll 1002d325: minigun (weapon id 21) -> fuser4 = 1.
+	to->client.fuser4 = from->client.m_iId == 21 ? 1.0f : 0.0f;
+
 	g_runfuncs = runfuncs;
 
 #if CLIENT_WEAPONS

@@ -21,6 +21,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include <stdint.h>
 
 #include "studio_util.h"
 #include "r_studioint.h"
@@ -64,7 +65,7 @@ static int StudioHeaderIsValid( studiohdr_t *hdr, model_t *model, int entityInde
 		return 0;
 	}
 
-	if( hdr->numbones < 0 || (unsigned int)hdr->boneindex >= length ||
+	if( hdr->numbones < 0 || hdr->numbones > MAXSTUDIOBONES || (unsigned int)hdr->boneindex >= length ||
 		(unsigned int)hdr->numbones > ( length - (unsigned int)hdr->boneindex ) / sizeof( mstudiobone_t ) )
 	{
 		gEngfuncs.Con_DPrintf( "StudioModelRenderer: bad bones %d/%d on %s (ent %d)\n",
@@ -77,21 +78,6 @@ static int StudioHeaderIsValid( studiohdr_t *hdr, model_t *model, int entityInde
 
 /////////////////////
 // Implementation of CStudioModelRenderer.h
-#define LEGS_BONES_COUNT	8
-
-// enumerate all the bones that used for gait animation
-const char *legs_bones[] =
-{
-	"Bip01",
-	"Bip01 Pelvis",
-	"Bip01 L Leg",
-	"Bip01 L Leg1",
-	"Bip01 L Foot",
-	"Bip01 R Leg",
-	"Bip01 R Leg1",
-	"Bip01 R Foot" 
-};
-
 /*
 ====================
 Init
@@ -138,6 +124,8 @@ CStudioModelRenderer::CStudioModelRenderer( void )
 	m_pbonetransform	= NULL;
 	m_plighttransform	= NULL;
 	m_pStudioHeader		= NULL;
+	m_pAnimData = NULL;
+	m_iAnimDataSize = 0;
 	m_pBodyPart		= NULL;
 	m_pSubModel		= NULL;
 	m_pPlayerInfo		= NULL;
@@ -229,66 +217,13 @@ StudioCalcBoneQuaterion
 */
 void CStudioModelRenderer::StudioCalcBoneQuaterion( int frame, float s, mstudiobone_t *pbone, mstudioanim_t *panim, float *adj, float *q )
 {
-	int j, k;
+	int j;
 	vec4_t q1, q2;
 	vec3_t angle1, angle2;
-	mstudioanimvalue_t *panimvalue;
-
 	for( j = 0; j < 3; j++ )
 	{
-		int ot = StudioSafeAnimOffset( panim, panim->offset[j + 3] );
-
-		if( ot == 0 )
-		{
-			angle2[j] = angle1[j] = pbone->value[ j + 3]; // default;
-		}
-		else
-		{
-			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + ot );
-			k = frame;
-			// DEBUG
-			if( panimvalue->num.total < panimvalue->num.valid )
-				k = 0;
-			while( panimvalue->num.total <= k )
-			{
-				k -= panimvalue->num.total;
-				panimvalue += panimvalue->num.valid + 1;
-				// DEBUG
-				if( panimvalue->num.total < panimvalue->num.valid )
-					k = 0;
-			}
-			// Bah, missing blend!
-			if( panimvalue->num.valid > k )
-			{
-				angle1[j] = Unaligned( panimvalue[k + 1].value );
-
-				if( panimvalue->num.valid > k + 1 )
-				{
-					angle2[j] = Unaligned( panimvalue[k + 2].value );
-				}
-				else
-				{
-					if( panimvalue->num.total > k + 1 )
-						angle2[j] = angle1[j];
-					else
-						angle2[j] = Unaligned( panimvalue[panimvalue->num.valid + 2].value );
-				}
-			}
-			else
-			{
-				angle1[j] = Unaligned( panimvalue[panimvalue->num.valid].value );
-				if( panimvalue->num.total > k + 1 )
-				{
-					angle2[j] = angle1[j];
-				}
-				else
-				{
-					angle2[j] = Unaligned( panimvalue[panimvalue->num.valid + 2].value );
-				}
-			}
-			angle1[j] = pbone->value[j+3] + angle1[j] * pbone->scale[j + 3];
-			angle2[j] = pbone->value[j+3] + angle2[j] * pbone->scale[j + 3];
-		}
+		angle1[j] = pbone->value[j + 3] + StudioAnimValue( panim, j + 3, frame ) * pbone->scale[j + 3];
+		angle2[j] = pbone->value[j + 3] + StudioAnimValue( panim, j + 3, frame + 1 ) * pbone->scale[j + 3];
 
 		if( pbone->bonecontroller[j + 3] != -1 )
 		{
@@ -317,61 +252,12 @@ StudioCalcBonePosition
 */
 void CStudioModelRenderer::StudioCalcBonePosition( int frame, float s, mstudiobone_t *pbone, mstudioanim_t *panim, float *adj, float *pos )
 {
-	int j, k;
-	mstudioanimvalue_t *panimvalue;
-
-	for( j = 0; j < 3; j++ )
+	for( int j = 0; j < 3; j++ )
 	{
-		int ot = StudioSafeAnimOffset( panim, panim->offset[j] );
+		float v1 = StudioAnimValue( panim, j, frame );
+		float v2 = StudioAnimValue( panim, j, frame + 1 );
+		pos[j] = pbone->value[j] + (v1 * (1 - s) + v2 * s) * pbone->scale[j];
 
-		pos[j] = pbone->value[j]; // default;
-		if( ot != 0 )
-		{
-			panimvalue = (mstudioanimvalue_t *)( (byte *)panim + ot );
-			/*
-			if( i == 0 && j == 0 )
-				Con_DPrintf( "%d  %d:%d  %f\n", frame, panimvalue->num.valid, panimvalue->num.total, s );
-			*/
-			
-			k = frame;
-			// DEBUG
-			if( panimvalue->num.total < panimvalue->num.valid )
-				k = 0;
-			// find span of values that includes the frame we want
-			while( panimvalue->num.total <= k )
-			{
-				k -= panimvalue->num.total;
-				panimvalue += panimvalue->num.valid + 1;
-  				// DEBUG
-				if( panimvalue->num.total < panimvalue->num.valid )
-					k = 0;
-			}
-			// if we're inside the span
-			if( panimvalue->num.valid > k )
-			{
-				// and there's more data in the span
-				if( panimvalue->num.valid > k + 1 )
-				{
-					pos[j] += ( Unaligned( panimvalue[k + 1].value ) * ( 1.0f - s ) + s * Unaligned( panimvalue[k + 2].value ) ) * pbone->scale[j];
-				}
-				else
-				{
-					pos[j] += Unaligned( panimvalue[k + 1].value ) * pbone->scale[j];
-				}
-			}
-			else
-			{
-				// are we at the end of the repeating values section and there's another section with data?
-				if( panimvalue->num.total <= k + 1 )
-				{
-					pos[j] += ( Unaligned( panimvalue[panimvalue->num.valid].value ) * ( 1.0f - s ) + s * Unaligned( panimvalue[panimvalue->num.valid + 2].value ) ) * pbone->scale[j];
-				}
-				else
-				{
-					pos[j] += Unaligned( panimvalue[panimvalue->num.valid].value ) * pbone->scale[j];
-				}
-			}
-		}
 		if( pbone->bonecontroller[j] != -1 && adj )
 		{
 			pos[j] += adj[pbone->bonecontroller[j]];
@@ -435,70 +321,66 @@ StudioGetAnim
 */
 mstudioanim_t *CStudioModelRenderer::StudioGetAnim( model_t *m_pSubModel, mstudioseqdesc_t *pseqdesc )
 {
-	mstudioseqgroup_t *pseqgroup;
-	cache_user_t *paSequences;
-	int iSeqGroup;
-	long rel = (byte *)pseqdesc - (byte *)m_pStudioHeader;
-	int bounds = m_pStudioHeader->length;
-
-	// The sequence descriptor itself lies outside the loaded model block
-	// (corrupt/oversized seqindex, truncated header, bad sequence index).
-	// Reading seqgroup/animindex here would deref unmapped memory - treat the
-	// whole sequence as unusable and degrade to the embedded header data.
-	if( rel < 0 || rel + (long)sizeof(mstudioseqdesc_t) > bounds )
+	m_pAnimData = NULL;
+	m_iAnimDataSize = 0;
+	int group = pseqdesc->seqgroup;
+	if( group < 0 || group >= m_pStudioHeader->numseqgroups || group >= MAXSTUDIOGROUPS ) return NULL;
+	if( m_pStudioHeader->seqgroupindex < 0 || m_pStudioHeader->numseqgroups >
+		(m_pStudioHeader->length - m_pStudioHeader->seqgroupindex) / (int)sizeof(mstudioseqgroup_t) ) return NULL;
+	mstudioseqgroup_t *groups = (mstudioseqgroup_t *)((byte *)m_pStudioHeader + m_pStudioHeader->seqgroupindex);
+	int offset = pseqdesc->animindex;
+	if( offset < 0 || pseqdesc->numblends <= 0 ) return NULL;
+	if( group == 0 )
 	{
-		gEngfuncs.Con_DPrintf( "StudioGetAnim: seqdesc %ld out of range (%d), using group 0\n", rel, bounds );
-		return (mstudioanim_t *)( (byte *)m_pStudioHeader );
+		m_pAnimData = (byte *)m_pStudioHeader;
+		m_iAnimDataSize = m_pStudioHeader->length;
+		if( offset > m_iAnimDataSize || groups[0].unused2 < 0 || groups[0].unused2 > m_iAnimDataSize - offset ) return NULL;
+		offset += groups[0].unused2;
 	}
-
-	iSeqGroup = pseqdesc->seqgroup;
-
-	// Sequence-group index out of the valid cache array range (corrupt or
-	// oversized group number, e.g. from a bad studio header) used to index
-	// past the 16-entry cache_user_t array and SEGV inside the game DLL's
-	// engine Cache_Check. Fall back to the model's embedded animations.
-	if( iSeqGroup != 0 && ( iSeqGroup < 1 || iSeqGroup >= MAXSTUDIOGROUPS ))
+	else
 	{
-		gEngfuncs.Con_DPrintf( "StudioGetAnim: seqgroup %d out of range, using group 0\n", iSeqGroup );
-		iSeqGroup = 0;
-	}
-
-	if( iSeqGroup == 0 )
-	{
-		int animindex = pseqdesc->animindex;
-
-		// Corrupt/truncated studio headers can carry an animindex far outside
-		// the loaded model block (the engine allocates the studio cache
-		// exactly phdr->length). Returning header+animindex then made callers
-		// SEGV reading panim past the mapping (observed seqgroup 0x6d041a17
-		// -> ~1.8 GB offset landed in an unmapped region). Degrade to the
-		// first embedded animation instead of crashing.
-		if( animindex < 0 || animindex >= bounds )
+		cache_user_t *cache = (cache_user_t *)m_pSubModel->submodels;
+		if( !cache )
 		{
-			gEngfuncs.Con_DPrintf( "StudioGetAnim: animindex %d out of range (%d), using 0\n", animindex, bounds );
-			animindex = 0;
+			cache = (cache_user_t *)IEngineStudio.Mem_Calloc( MAXSTUDIOGROUPS, sizeof(cache_user_t) );
+			m_pSubModel->submodels = (dmodel_t *)cache;
 		}
-
-		return (mstudioanim_t *)( (byte *)m_pStudioHeader + animindex );
+		if( !IEngineStudio.Cache_Check( &cache[group] ) )
+		{
+			// QC group names can contain the author's build path. Sven first
+			// tries <model><group>.mdl next to the model, then the stored name.
+			char path[256];
+			const char *extension = strrchr( m_pSubModel->name, '.' );
+			int stem = extension ? (int)(extension - m_pSubModel->name) : (int)strlen( m_pSubModel->name );
+			snprintf( path, sizeof(path), "%.*s%02d.mdl", stem, m_pSubModel->name, group );
+			int size = 0;
+			byte *file = gEngfuncs.COM_LoadFile( path, 5, &size );
+			if( !file )
+			{
+				snprintf( path, sizeof(path), "%.*s", (int)sizeof(groups[group].name), groups[group].name );
+				file = gEngfuncs.COM_LoadFile( path, 5, &size );
+			}
+			if( !file ) return NULL;
+			bool valid = size >= (int)sizeof(studioseqhdr_t);
+			if( valid )
+			{
+				studioseqhdr_t *header = (studioseqhdr_t *)file;
+				valid = header->id == 0x51534449 && header->version == STUDIO_VERSION &&
+					header->length >= (int)sizeof(*header) && header->length <= size;
+			}
+			gEngfuncs.COM_FreeFile( file );
+			if( !valid ) return NULL;
+			IEngineStudio.LoadCacheFile( path, &cache[group] );
+		}
+		studioseqhdr_t *hdr = (studioseqhdr_t *)IEngineStudio.Cache_Check( &cache[group] );
+		if( !hdr || hdr->id != 0x51534449 /* IDSQ */ || hdr->version != STUDIO_VERSION || hdr->length < (int)sizeof(*hdr) ) return NULL;
+		m_pAnimData = (byte *)hdr;
+		m_iAnimDataSize = hdr->length;
 	}
-
-	pseqgroup = (mstudioseqgroup_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqgroupindex ) + iSeqGroup;
-
-	paSequences = (cache_user_t *)m_pSubModel->submodels;
-
-	if( paSequences == NULL )
-	{
-		paSequences = (cache_user_t *)IEngineStudio.Mem_Calloc( MAXSTUDIOGROUPS, sizeof(cache_user_t) ); // UNDONE: leak!
-		m_pSubModel->submodels = (dmodel_t *)paSequences;
-	}
-
-	if( !IEngineStudio.Cache_Check( (struct cache_user_s *)&( paSequences[iSeqGroup] ) ) )
-	{
-		gEngfuncs.Con_DPrintf("loading %s\n", pseqgroup->name );
-		IEngineStudio.LoadCacheFile( pseqgroup->name, (struct cache_user_s *)&paSequences[iSeqGroup] );
-	}
-
-	return (mstudioanim_t *)( (byte *)paSequences[iSeqGroup].data + pseqdesc->animindex );
+	int bones = StudioNumBones();
+	if( offset < 0 || offset > m_iAnimDataSize || bones <= 0 ||
+		pseqdesc->numblends > (m_iAnimDataSize - offset) / (int)sizeof(mstudioanim_t) / bones ) return NULL;
+	return (mstudioanim_t *)(m_pAnimData + offset);
 }
 
 /*
@@ -515,7 +397,7 @@ int CStudioModelRenderer::StudioNumBones( void )
 	// header can advertise a huge count and make every bone loop walk past
 	// both the arrays and the loaded model block.
 	if( num < 0 || num > MAXSTUDIOBONES )
-		return MAXSTUDIOBONES;
+		return 0;
 	return num;
 }
 
@@ -537,22 +419,31 @@ mstudiobone_t *CStudioModelRenderer::StudioGetBones( void )
 
 /*
 ====================
-StudioSafeAnimOffset
+StudioAnimValue
 
 ====================
 */
-int CStudioModelRenderer::StudioSafeAnimOffset( mstudioanim_t *panim, int off )
+float CStudioModelRenderer::StudioAnimValue( mstudioanim_t *anim, int channel, int frame )
 {
-	long rel = (byte *)panim - (byte *)m_pStudioHeader;
-	int bounds = m_pStudioHeader->length;
-
-	// panim outside the embedded block (e.g. external seqgroup data) or the
-	// derived location beyond it cannot be validated here: treat as "default".
-	if( rel < 0 || rel >= bounds || off <= 0 )
-		return 0;
-	if( off + rel >= bounds )
-		return 0;
-	return off;
+	if( !anim || !m_pAnimData || frame < 0 ) return 0;
+	uintptr_t address = (uintptr_t)anim, start = (uintptr_t)m_pAnimData;
+	if( address < start || m_iAnimDataSize < (int)sizeof(*anim) ||
+		address - start > (size_t)m_iAnimDataSize - sizeof(*anim) ) return 0;
+	size_t offset = address - start;
+	int rel = anim->offset[channel];
+	if( !rel || rel > m_iAnimDataSize - offset ) return 0;
+	offset += rel;
+	while( offset <= m_iAnimDataSize - (int)sizeof(mstudioanimvalue_t) )
+	{
+		mstudioanimvalue_t *values = (mstudioanimvalue_t *)(m_pAnimData + offset);
+		int valid = values->num.valid, total = values->num.total;
+		if( !total || !valid || valid > total ||
+			(valid + 1) > (m_iAnimDataSize - offset) / (int)sizeof(*values) ) return 0;
+		if( frame < total ) return Unaligned( values[frame + 1 < valid ? frame + 1 : valid].value );
+		frame -= total;
+		offset += (valid + 1) * sizeof(*values);
+	}
+	return 0;
 }
 
 /*
@@ -563,21 +454,23 @@ StudioPlayerBlend
 */
 void CStudioModelRenderer::StudioPlayerBlend( mstudioseqdesc_t *pseqdesc, int *pBlend, float *pPitch )
 {
-	// Sven-port (proedu): player entity pitch arrives as NEGATED RAW view
-	// degrees (stock client.dll contains no /-3 or x3 pitch math anywhere;
-	// V_CalcGunAngle already uses plain negation for the same reason), while
-	// HL divided it by -3 here. Blend raw degrees directly against the
-	// model's range (Sven playermodels: typically -70..70). The old x3
-	// saturated past ~23 degrees and steep up-aim rendered as down-aim.
-	*pBlend = *pPitch;
+	// Non-angular blend channels (Sven idle sequences often use 0..1)
+	// are driven by the server, not by view pitch in degrees.
+	if( !( pseqdesc->blendtype[0] & ( STUDIO_XR | STUDIO_YR | STUDIO_ZR ) ) )
+	{
+		*pBlend = m_pCurrentEntity->curstate.blending[0];
+		*pPitch = 0;
+		return;
+	}
+	*pBlend = *pPitch * 3.0f;
 	if( *pBlend < pseqdesc->blendstart[0] )
 	{
-		*pPitch -= pseqdesc->blendstart[0];
+		*pPitch -= pseqdesc->blendstart[0] / 3.0f;
 		*pBlend = 0;
 	}
 	else if( *pBlend > pseqdesc->blendend[0] )
 	{
-		*pPitch -= pseqdesc->blendend[0];
+		*pPitch -= pseqdesc->blendend[0] / 3.0f;
 		*pBlend = 255;
 	}
 	else
@@ -614,6 +507,8 @@ void CStudioModelRenderer::StudioSetUpTransform( int trivial_accept )
 	angles[ROLL] = m_pCurrentEntity->curstate.angles[ROLL];
 	angles[PITCH] = m_pCurrentEntity->curstate.angles[PITCH];
 	angles[YAW] = m_pCurrentEntity->curstate.angles[YAW];
+	if( !m_pCurrentEntity->player && m_pCurrentEntity->curstate.movetype == MOVETYPE_NONE )
+		VectorCopy( m_pCurrentEntity->angles, angles );
 
 	//Con_DPrintf( "Angles %4.2f prev %4.2f for %i\n", angles[PITCH], m_pCurrentEntity->index );
 	//Con_DPrintf( "movetype %d %d\n", m_pCurrentEntity->movetype, m_pCurrentEntity->aiment );
@@ -788,11 +683,12 @@ void CStudioModelRenderer::StudioCalcRotations( float pos[][3], vec4_t *q, mstud
 
 	StudioCalcBoneAdj( dadt, adj, m_pCurrentEntity->curstate.controller, m_pCurrentEntity->latched.prevcontroller, m_pCurrentEntity->mouth.mouthopen );
 
-	for( i = 0; i < iNumbones; i++, pbone++, panim++ )
+	for( i = 0; i < iNumbones; i++, pbone++ )
 	{
 		StudioCalcBoneQuaterion( frame, s, pbone, panim, adj, q[i] );
 
 		StudioCalcBonePosition( frame, s, pbone, panim, adj, pos[i] );
+		if( panim ) panim++;
 		// if( 0 && i == 0 )
 		//	Con_DPrintf( "%d %d %d %d\n", m_pCurrentEntity->curstate.sequence, frame, j, k );
 	}
@@ -983,7 +879,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		float s;
 		float dadt;
 
-		panim += iNumbones;
+		if( panim ) panim += iNumbones;
 		StudioCalcRotations( pos2, q2, pseqdesc, panim, f );
 
 		dadt = StudioEstimateInterpolant();
@@ -993,10 +889,10 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 		if( pseqdesc->numblends == 4 )
 		{
-			panim += iNumbones;
+			if( panim ) panim += iNumbones;
 			StudioCalcRotations( pos3, q3, pseqdesc, panim, f );
 
-			panim += iNumbones;
+			if( panim ) panim += iNumbones;
 			StudioCalcRotations( pos4, q4, pseqdesc, panim, f );
 
 			s = ( m_pCurrentEntity->curstate.blending[0] * dadt + m_pCurrentEntity->latched.prevblending[0] * ( 1.0 - dadt ) ) / 255.0;
@@ -1023,7 +919,7 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 		if( pseqdesc->numblends > 1 )
 		{
-			panim += iNumbones;
+			if( panim ) panim += iNumbones;
 			StudioCalcRotations( pos2, q2, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
 			s = (m_pCurrentEntity->latched.prevseqblending[0]) / 255.0;
@@ -1031,10 +927,10 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 			if( pseqdesc->numblends == 4 )
 			{
-				panim += iNumbones;
+				if( panim ) panim += iNumbones;
 				StudioCalcRotations( pos3, q3, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
-				panim += iNumbones;
+				if( panim ) panim += iNumbones;
 				StudioCalcRotations( pos4, q4, pseqdesc, panim, m_pCurrentEntity->latched.prevframe );
 
 				s = ( m_pCurrentEntity->latched.prevseqblending[0] ) / 255.0;
@@ -1056,30 +952,36 @@ void CStudioModelRenderer::StudioSetupBones( void )
 
 	pbones = StudioGetBones();
 
-	// calc gait animation
-	if( m_pPlayerInfo && m_pPlayerInfo->gaitsequence != 0 )
+	// Sven transmits a separate lower-body sequence for running attacks.
+	int gait = m_pPlayerInfo ? m_pPlayerInfo->gaitsequence : m_pCurrentEntity->curstate.gaitsequence;
+	bool npcGait = !m_pPlayerInfo && m_pCurrentEntity->curstate.iuser1 && gait != 255 &&
+		gait != m_pCurrentEntity->curstate.sequence;
+	if( ( m_pPlayerInfo ? gait != 0 : npcGait ) && gait >= 0 && gait < m_pStudioHeader->numseq )
 	{
-		if( m_pPlayerInfo->gaitsequence >= m_pStudioHeader->numseq )
+		pseqdesc = (mstudioseqdesc_t *)((byte *)m_pStudioHeader + m_pStudioHeader->seqindex) + gait;
+		float gaitFrame = m_pPlayerInfo ? m_pPlayerInfo->gaitframe :
+			m_pCurrentEntity->curstate.fuser1 * (pseqdesc->numframes - 1) / 256.0f;
+		if( !m_pPlayerInfo && m_fDoInterp && m_clTime >= m_pCurrentEntity->curstate.fuser2 )
+			gaitFrame += (m_clTime - m_pCurrentEntity->curstate.fuser2) *
+				m_pCurrentEntity->curstate.framerate * pseqdesc->fps;
+		if( pseqdesc->numframes <= 1 ) gaitFrame = 0;
+		else if( pseqdesc->flags & STUDIO_LOOPING )
 		{
-			m_pPlayerInfo->gaitsequence = 0;
+			gaitFrame = fmod( gaitFrame, pseqdesc->numframes - 1 );
+			if( gaitFrame < 0 ) gaitFrame += pseqdesc->numframes - 1;
 		}
-
-		pseqdesc = (mstudioseqdesc_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqindex ) + m_pPlayerInfo->gaitsequence;
-
+		else gaitFrame = fmaxf( 0.0f, fminf( gaitFrame, pseqdesc->numframes - 1.001f ) );
 		panim = StudioGetAnim( m_pRenderModel, pseqdesc );
-		StudioCalcRotations( pos2, q2, pseqdesc, panim, m_pPlayerInfo->gaitframe );
+		StudioCalcRotations( pos2, q2, pseqdesc, panim, gaitFrame );
 
+		// Follow the skeleton hierarchy, including custom leg/toe bones.
+		bool lowerBody[MAXSTUDIOBONES];
 		for( i = 0; i < iNumbones; i++ )
 		{
-			for( j = 0; j < LEGS_BONES_COUNT; j++ )
-			{
-				if( !strcmp( pbones[i].name, legs_bones[j] ) )
-					break;
-			}
-
-			if( j == LEGS_BONES_COUNT )
-				continue;	// not used for legs
-
+			int parent = pbones[i].parent;
+			lowerBody[i] = parent < 0 || (parent < i && lowerBody[parent]);
+			if( !strcmp( pbones[i].name, "Bip01 Spine" ) ) lowerBody[i] = false;
+			if( !lowerBody[i] ) continue;
 			memcpy( pos[i], pos2[i], sizeof(pos[i]) );
 			memcpy( q[i], q2[i], sizeof(q[i]) );
 		}
@@ -1455,27 +1357,7 @@ void CStudioModelRenderer::StudioProcessGait( entity_state_t *pplayer )
 
 	pseqdesc = (mstudioseqdesc_t *)( (byte *)m_pStudioHeader + m_pStudioHeader->seqindex ) + m_pCurrentEntity->curstate.sequence;
 
-	// TEMP-DIAG (idle player pitch): capture the blend INPUT before
-	// StudioPlayerBlend clobbers angles[PITCH] with the residual, so one
-	// test run settles whether idle look-down is a wrong input pitch
-	// (server/engine side) or a wrong blend mapping (renderer side).
-	// Remove once idle aim is confirmed.
-	float flPitchIn = m_pCurrentEntity->angles[PITCH];
-
 	StudioPlayerBlend( pseqdesc, &iBlend, &m_pCurrentEntity->angles[PITCH] );
-
-	{
-		static float s_fGaitDiagNext = 0.0f;
-		cvar_t *pDbg = IEngineStudio.GetCvar( "cl_goldsrc_debug" );
-		if( pDbg && pDbg->value >= 1.0f && m_clTime >= s_fGaitDiagNext )
-		{
-			s_fGaitDiagNext = m_clTime + 1.0f;
-			gEngfuncs.Con_Printf( "TEMP-DIAG Gait idx=%d seq=%d pitchIn=%.1f blend=%d bstart=%.0f bend=%.0f curPitch=%.1f\n",
-				m_pCurrentEntity->index, m_pCurrentEntity->curstate.sequence,
-				flPitchIn, iBlend, pseqdesc->blendstart[0], pseqdesc->blendend[0],
-				m_pCurrentEntity->curstate.angles[PITCH] );
-		}
-	}
 
 	m_pCurrentEntity->latched.prevangles[PITCH] = m_pCurrentEntity->angles[PITCH];
 	m_pCurrentEntity->curstate.blending[0] = iBlend;
@@ -1593,7 +1475,6 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 	IEngineStudio.StudioSetHeader( m_pStudioHeader );
 	IEngineStudio.SetRenderModel( m_pRenderModel );
 
-	if( pplayer->gaitsequence )
 	{
 		vec3_t orig_angles;
 		m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
@@ -1608,23 +1489,6 @@ int CStudioModelRenderer::StudioDrawPlayer( int flags, entity_state_t *pplayer )
 		StudioSetUpTransform( 0 );
 		VectorCopy( orig_angles, m_pCurrentEntity->angles );
 	}
-	else
-	{
-		m_pCurrentEntity->curstate.controller[0] = 127;
-		m_pCurrentEntity->curstate.controller[1] = 127;
-		m_pCurrentEntity->curstate.controller[2] = 127;
-		m_pCurrentEntity->curstate.controller[3] = 127;
-		m_pCurrentEntity->latched.prevcontroller[0] = m_pCurrentEntity->curstate.controller[0];
-		m_pCurrentEntity->latched.prevcontroller[1] = m_pCurrentEntity->curstate.controller[1];
-		m_pCurrentEntity->latched.prevcontroller[2] = m_pCurrentEntity->curstate.controller[2];
-		m_pCurrentEntity->latched.prevcontroller[3] = m_pCurrentEntity->curstate.controller[3];
-
-		m_pPlayerInfo = IEngineStudio.PlayerInfo( m_nPlayerIndex );
-		m_pPlayerInfo->gaitsequence = 0;
-
-		StudioSetUpTransform( 0 );
-	}
-
 	if( flags & STUDIO_RENDER )
 	{
 		// see if the bounding box lets us trivially reject, also sets

@@ -1868,7 +1868,7 @@ void PM_SpectatorMove( void )
 	// doesn't need excate track position, only to generate PVS, so just copy
 	// targets position and real view position is calculated on client (saves server CPU)
 	
-	if( pmove->iuser1 == OBS_ROAMING )
+	if( pmove->iuser2 == 0 || pmove->iuser1 == OBS_ROAMING )
 	{
 #if CLIENT_DLL
 		// jump only in roaming mode
@@ -2544,6 +2544,10 @@ void PM_Jump( void )
 	qboolean tfc = false;
 
 	qboolean cansuperjump = false;
+
+	// Sven client.dll PM_Jump: fuser4 is the weapon jump-inhibit flag.
+	if( pmove->fuser4 >= 1.0f )
+		return;
 
 	if( pmove->dead )
 	{

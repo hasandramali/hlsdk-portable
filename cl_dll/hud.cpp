@@ -421,8 +421,11 @@ int __MsgFunc_TimeEnd( const char *pszName, int iSize, void *pbuf )
 #endif
 
 // This is called every time the DLL is loaded
+extern void SvenEffects_Init();
+
 void CHud::Init( void )
 {
+	SvenEffects_Init();
 	HOOK_MESSAGE( Logo );
 	HOOK_MESSAGE( ResetHUD );
 	HOOK_MESSAGE( GameMode );

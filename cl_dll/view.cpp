@@ -740,10 +740,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// Apply this at all times
 	{
-		// Sven-port (proedu): slam the local player's ENTITY pitch as negated
-		// raw view pitch. HL divided by -3 here, but stock Sven client.dll has
-		// no /-3 pitch math anywhere and V_CalcGunAngle already negates
-		// plainly; the /-3 tilted our thirdperson/corpse model 3x off.
+		// Match the engine studio pitch convention and StudioPlayerBlend (x3).
 		float pitch = -pparams->viewangles[0];
 
 		// Normalize angles
@@ -753,6 +750,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 			pitch += 360.0f;
 
 		// Slam local player's pitch value
+		pitch /= 3.0f;
 		ent->angles[0] = pitch;
 		ent->curstate.angles[0] = pitch;
 		ent->prevstate.angles[0] = pitch;
@@ -1209,7 +1207,7 @@ void V_GetChasePos( int target, float *cl_angles, float *origin, float *angles )
 		if( cl_angles == NULL )	// no mouse angles given, use entity angles ( locked mode )
 		{
 			VectorCopy( ent->angles, angles);
-			angles[0] *= -1.0f;
+			angles[0] *= -3.0f;
 		}
 		else
 			VectorCopy( cl_angles, angles );
@@ -1247,7 +1245,7 @@ void V_GetInEyePos( int target, float *origin, float *angles )
 	VectorCopy( ent->origin, origin );
 	VectorCopy( ent->angles, angles );
 
-	angles[PITCH] *= -1.0f;	// entity pitch is negated raw view pitch: recover view pitch
+	angles[PITCH] *= -3.0f;	// recover view pitch from studio pitch
 
 	if( ent->curstate.solid == SOLID_NOT )
 	{
@@ -1456,7 +1454,7 @@ void V_CalcSpectatorRefdef( struct ref_params_s * pparams )
 		{
 			// only get viewangles from entity
 			VectorCopy( ent->angles, pparams->cl_viewangles );
-			pparams->cl_viewangles[PITCH] *= -1.0f;	// entity pitch is negated raw view pitch
+			pparams->cl_viewangles[PITCH] *= -3.0f;	// recover view pitch from studio pitch
 		}
 	}
 
@@ -1465,7 +1463,8 @@ void V_CalcSpectatorRefdef( struct ref_params_s * pparams )
 	if( pparams->nextView == 0 )
 	{
 		// first renderer cycle, full screen
-		switch( g_iUser1 )
+		// Sven uses mode 2 with no target for free roaming.
+		switch( g_iUser2 == 0 && g_iUser1 == OBS_CHASE_FREE ? OBS_ROAMING : g_iUser1 )
 		{
 			case OBS_CHASE_LOCKED:
 				V_GetChasePos( g_iUser2, NULL, v_origin, v_angles );
@@ -1477,7 +1476,8 @@ void V_CalcSpectatorRefdef( struct ref_params_s * pparams )
 				VectorCopy( v_cl_angles, v_angles );
 				VectorCopy( v_sim_org, v_origin );
 				// override values if director is active
-				gHUD.m_Spectator.GetDirectorCamera(v_origin, v_angles);
+				if( gEngfuncs.IsSpectateOnly() )
+					gHUD.m_Spectator.GetDirectorCamera(v_origin, v_angles);
 				break;
 			case OBS_IN_EYE:
 				V_CalcNormalRefdef( pparams );
