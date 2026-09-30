@@ -14,6 +14,7 @@
 #include <VGUI_ActionSignal.h>
 #include <string.h>
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
 #include "camera.h"
 #include "kbutton.h"
@@ -109,6 +110,7 @@ void VGui_Startup()
 		gViewPort->setParent( root );
 	}
 
+	SvenUI_VidInit();
 	/*
 	TexturePanel *texturePanel = new TexturePanel();
 	texturePanel->setParent( gViewPort );
@@ -117,6 +119,7 @@ void VGui_Startup()
 
 void VGui_Shutdown()
 {
+	SvenUI_Shutdown();
 	delete gViewPort;
 	gViewPort = NULL;
 }

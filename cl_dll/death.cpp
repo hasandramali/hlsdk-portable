@@ -1,3 +1,4 @@
+#include "sven_ui.h"
 /***
 *
 *	Copyright (c) 1996-2002, Valve LLC. All rights reserved.
@@ -191,6 +192,8 @@ int CHudDeathNotice::MsgFunc_DeathMsg( const char *pszName, int iSize, void *pbu
 
 	int killer = READ_BYTE();
 	int victim = READ_BYTE();
+	cl_entity_t *local = gEngfuncs.GetLocalPlayer();
+	if( local && local->index == victim ) SvenUI_CloseKeyboard();
 
 	char killedwith[32];
 	strcpy( killedwith, "d_" );

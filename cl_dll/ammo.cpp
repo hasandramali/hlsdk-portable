@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "pm_shared.h"
@@ -253,7 +254,7 @@ DECLARE_MESSAGE( m_Ammo, HideHUD )	// Sven HUD hide flags, LE SHORT (client.so 0
 DECLARE_MESSAGE( m_Ammo, TE_CUSTOM )	// Sven custom effect/state, [BYTE type](1/2/3)
 DECLARE_MESSAGE( m_Ammo, WeaponSpr )	// Sven weapon sprite payload, [SHORT id][STRING]
 DECLARE_MESSAGE( m_Ammo, ServerVer )	// Sven server version, [STRING]
-DECLARE_MESSAGE( m_Ammo, MapList )	// Sven map list (wire TBD; consume only)
+DECLARE_MESSAGE( m_Ammo, MapList )	// Sven chunked map-vote list
 DECLARE_MESSAGE( m_Ammo, ClServerInfo )	// Sven server info, [BYTE][LONG][STRING44]
 DECLARE_MESSAGE( m_Ammo, ClExtrasInfo )	// Sven custom HUD table (grammar TBD; consume only)
 
@@ -627,34 +628,10 @@ int CHudAmmo::MsgFunc_HideWeapon( const char *pszName, int iSize, void *pbuf )
 }
 
 //
-// InvRemove -- Sven inventory removal, svc 133 fixed 5: [LONG id][BYTE].
-// Wire layout reverse-verified (client.dll MsgFunc_InvRemove 0x10031be0 ->
-// 0x10061a30 consumes exactly 5 bytes; engine cl_game.c
-// CL_WeaponListFix_OnInvRemovePayload mirrors it). Drop the weapon from the
-// client inventory so removed weapons leave the menu/rotation; a later
-// CurWeapon/WeapPickup re-arms it, so a mis-mapped id self-heals on wield.
-//
-int CHudAmmo::MsgFunc_InvRemove( const char *pszName, int iSize, void *pbuf )
+// Map inventory IDs are independent of weapon IDs.
+int CHudAmmo::MsgFunc_InvRemove( const char *name, int size, void *data )
 {
-	BEGIN_READ( pbuf, iSize );
-
-	int iId = READ_LONG();
-	READ_BYTE(); // secondary key, consume only
-
-	if( iId > 0 && iId < MAX_WEAPONS )
-	{
-		WEAPON *pWeapon = gWR.GetWeapon( iId );
-		if( pWeapon && pWeapon->iId )
-		{
-			if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
-				gEngfuncs.Con_Printf( "TEMP-DIAG InvRemove drops %s (ID %d)\n", pWeapon->szName, iId );
-			gWR.DropWeapon( pWeapon );
-			if( m_pWeapon == pWeapon )
-				m_pWeapon = NULL;
-		}
-	}
-
-	return 1;
+ return SvenUI_InvRemove(name,size,data);
 }
 
 //
@@ -792,15 +769,10 @@ int CHudAmmo::MsgFunc_ServerVer( const char *pszName, int iSize, void *pbuf )
 }
 
 //
-// MapList -- Sven map list, svc 102. Wire grammar still open (handler
-// delegates in client.so); consume only, no state yet.
-//
-int CHudAmmo::MsgFunc_MapList( const char *pszName, int iSize, void *pbuf )
+// MapList: [BYTE mode][SHORT range][STRING names], handled by Sven UI.
+int CHudAmmo::MsgFunc_MapList( const char *name, int size, void *data )
 {
-	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
-		gEngfuncs.Con_Printf( "TEMP-DIAG MapList stub size=%d\n", iSize );
-
-	return 1;
+ return SvenUI_MapList(name,size,data);
 }
 
 // Sven server info record (ClServerInfo, svc 147):

@@ -42,6 +42,12 @@
 //-----------------------------------------------------------------------------
 // Purpose: Displays the MOTD and basic server information
 //-----------------------------------------------------------------------------
+class MissionBriefingAction : public ActionSignal
+{
+public:
+ void actionPerformed(Panel *) { if(gViewPort) gViewPort->ShowMissionBriefing(); }
+};
+
 class CMessageWindowPanel : public CMenuPanel
 {
 public:
@@ -49,6 +55,9 @@ public:
 
 private:
 	CTransparentPanel *m_pBackgroundPanel;
+	CommandButton *m_pBriefingButton;
+public:
+	void Open() { CMenuPanel::Open(); m_pBriefingButton->setVisible(GetMenuID() == MENU_INTRO); }
 };
 
 //-----------------------------------------------------------------------------
@@ -142,6 +151,10 @@ CMessageWindowPanel::CMessageWindowPanel( const char *szMOTD, const char *szTitl
 	CommandButton *pButton = new CommandButton( CHudTextMessage::BufferedLocaliseTextString( "#Menu_OK" ), iXPos + XRES( 16 ), iYPos + iYSize - YRES( 16 ) - BUTTON_SIZE_Y, CMENU_SIZE_X, BUTTON_SIZE_Y );
 	pButton->addActionSignal( new CMenuHandler_TextWindow( HIDE_TEXTWINDOW ) );
 	pButton->setParent( this );
+	CommandButton *briefing = new CommandButton("Mission Briefing >>",iXPos + XRES(184),iYPos + iYSize - YRES(16) - BUTTON_SIZE_Y,XRES(224),BUTTON_SIZE_Y);
+	briefing->addActionSignal(new MissionBriefingAction);
+	briefing->setParent(this);
+	m_pBriefingButton = briefing;
 }
 
 

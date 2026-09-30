@@ -1,3 +1,4 @@
+#include "sven_ui.h"
 /***
 *
 *	Copyright (c) 1996-2002, Valve LLC. All rights reserved.
@@ -110,6 +111,8 @@ int CHudHealth::MsgFunc_Health( const char *pszName, int iSize, void *pbuf )
 		x = READ_LONG();	// Sven Coop behavior
 
 	m_iFlags |= HUD_ACTIVE;
+
+	if( x <= 0 ) SvenUI_CloseKeyboard();
 
 	// Only update the fade if we've changed health
 	if( x != m_iHealth )

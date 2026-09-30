@@ -19,6 +19,7 @@
 //
 
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
 #include <string.h>
 #include <stdio.h>
@@ -534,6 +535,7 @@ void CHud::Init( void )
 	m_AmmoSecondary.Init();
 	m_TextMessage.Init();
 	m_StatusIcons.Init();
+	SvenUI_Init();
 #if USE_VGUI
 	GetClientVoiceMgr()->Init(&g_VoiceStatusHelper, (vgui::Panel**)&gViewPort);
 #endif

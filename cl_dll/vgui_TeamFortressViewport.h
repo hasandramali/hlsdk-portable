@@ -9,6 +9,7 @@
 #define TEAMFORTRESSVIEWPORT_H
 
 #include <VGUI_Panel.h>
+#include "sven_ui_protocol.h"
 #include <VGUI_Frame.h>
 #include <VGUI_TextPanel.h>
 #include <VGUI_Label.h>
@@ -397,6 +398,7 @@ public:
 	float		m_flButtonSizeY;
 	int		m_iSpectCmdMenu;
 	void		AddButton( CommandButton *pButton );
+	void AddExitButton();
 	bool		RecalculateVisibles( int iNewYPos, bool bHideAll );
 	void		RecalculatePositions( int iYOffset );
 	void		MakeVisible( CCommandMenu *pChildMenu );
@@ -517,8 +519,7 @@ private:
 	CSchemeManager m_SchemeManager;
 
 	// MOTD
-	int		m_iGotAllMOTD;
-	char	m_szMOTD[ MAX_MOTD_LENGTH ];
+	SvenUI::Motd m_MOTD;
 
 	//  Command Menu Team buttons
 	CommandButton *m_pTeamButtons[6];
@@ -568,6 +569,7 @@ public:
 	void HideCommandMenu( void );
 	void SetCurrentCommandMenu( CCommandMenu *pNewMenu );
 	void SetCurrentMenu( CMenuPanel *pMenu );
+	CMenuPanel *GetCurrentMenu() { return m_pCurrentMenu; }
 	void SetEndOfTime( float flTimeEnd );
 
 	void ShowScoreBoard( void );
@@ -579,6 +581,8 @@ public:
 	void ShowVGUIMenu( int iMenu );
 	void HideVGUIMenu( void );
 	void HideTopMenu( void );
+	void ShowMissionBriefing();
+	void DismissMenu(int id);
 
 	CMenuPanel* CreateTextWindow( int iTextToShow );
 
@@ -1521,6 +1525,8 @@ public:
 		else
 			m_pNextMenu = pNextPanel;
 	}
+
+	void ReplaceNextMenu(CMenuPanel *next) { m_pNextMenu = next; }
 
 	void SetMenuID( int iID )
 	{

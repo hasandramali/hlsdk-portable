@@ -17,6 +17,7 @@
 //
 
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
 #include "parsemsg.h"
 #include "r_efx.h"
@@ -34,6 +35,7 @@ extern float g_lastFOV;			// Vit_amiN
 int CHud::MsgFunc_ResetHUD( const char *pszName, int iSize, void *pbuf )
 {
 	ASSERT( iSize == 0 );
+	SvenUI_CloseKeyboard();
 
 	// clear all hud data
 	HUDLIST *pList = m_pHudList;
@@ -67,6 +69,7 @@ void CHud::MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	SvenUI_Reset();
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
 

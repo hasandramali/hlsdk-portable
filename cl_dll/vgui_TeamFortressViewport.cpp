@@ -35,6 +35,8 @@
 #include <VGUI_BuildGroup.h>
 
 #include "hud.h"
+#include "sven_ui.h"
+#include <ctype.h>
 #include "cl_util.h"
 #include "camera.h"
 #include "kbutton.h"
@@ -166,6 +168,26 @@ char *GetVGUITGAName( const char *pszName )
 //================================================================
 // COMMAND MENU
 //================================================================
+class CommandMenuExit : public ActionSignal
+{
+public:
+ void actionPerformed(Panel *) { if(gViewPort) gViewPort->HideCommandMenu(); }
+};
+
+void CCommandMenu::AddExitButton()
+{
+ // Reserve the final slot even if a custom file fills the entire menu.
+ if(m_iButtons == MAX_BUTTONS) {
+  m_aButtons[--m_iButtons]->setVisible(false);
+  m_aButtons[m_iButtons]->setParent(NULL);
+ }
+ CommandButton *button = new CommandButton("EXIT",0,0,getWide(),m_flButtonSizeY);
+ AddButton(button);
+ button->setBoundKey(0);
+ button->setParentMenu(this);
+ button->addActionSignal(new CommandMenuExit);
+}
+
 void CCommandMenu::AddButton( CommandButton *pButton )
 {
 	if( m_iButtons >= MAX_BUTTONS )
@@ -624,12 +646,12 @@ void TeamFortressViewport::Initialize( void )
 		m_pSpectatorPanel->setVisible( false );
 	}
 
-	// Make sure all menus are hidden
-	HideVGUIMenu();
+	// A video restart must not request a server camera exit.
+	if( !SvenUI_CameraActive() ) HideVGUIMenu();
 	HideCommandMenu();
 
 	// Clear out some data
-	m_iGotAllMOTD = true;
+	m_MOTD = SvenUI::Motd();
 	m_iRandomPC = false;
 	m_flScoreBoardLastUpdated = 0;
 	m_flSpectatorPanelLastUpdated = 0;
@@ -675,6 +697,9 @@ int TeamFortressViewport::CreateCommandMenu( const char *menuFile, int direction
 	{
 		gEngfuncs.Con_DPrintf( "Unable to open %s\n", menuFile);
 		SetCurrentCommandMenu( NULL );
+		m_iInitialized = true;
+		for( int exitMenu = newIndex; exitMenu < m_iNumMenus; ++exitMenu )
+			m_pCommandMenus[exitMenu]->AddExitButton();
 		return newIndex;
 	}
 
@@ -719,6 +744,8 @@ int TeamFortressViewport::CreateCommandMenu( const char *menuFile, int direction
 					gEngfuncs.COM_FreeFile( pFileStart );	// Vit_amiN: prevent the memory leak
 					m_iInitialized = false;
 
+					for( int exitMenu = newIndex; exitMenu < m_iNumMenus; ++exitMenu )
+						m_pCommandMenus[exitMenu]->AddExitButton();
 					return newIndex;
 				}
 
@@ -882,6 +909,8 @@ int TeamFortressViewport::CreateCommandMenu( const char *menuFile, int direction
 		e = NULL;
 		gEngfuncs.COM_FreeFile( pFileStart );	// Vit_amiN: prevent the memory leak
 		m_iInitialized = false;
+		for( int exitMenu = newIndex; exitMenu < m_iNumMenus; ++exitMenu )
+			m_pCommandMenus[exitMenu]->AddExitButton();
 		return newIndex;
 	}
 #endif
@@ -892,6 +921,8 @@ int TeamFortressViewport::CreateCommandMenu( const char *menuFile, int direction
 
 	m_iInitialized = true;
 
+	for( int exitMenu = newIndex; exitMenu < m_iNumMenus; ++exitMenu )
+		m_pCommandMenus[exitMenu]->AddExitButton();
 	return newIndex;
 }
 
@@ -1365,62 +1396,36 @@ void TeamFortressViewport::SetEndOfTime( float flTimeEnd )
 CMenuPanel *TeamFortressViewport::CreateTextWindow( int iTextToShow )
 {
 	char sz[256];
-	char *cText;
+	const char *cText = "";
 	char *pfile = NULL;
 	static const int MAX_TITLE_LENGTH = 64;
-	char cTitle[MAX_TITLE_LENGTH];
+	char cTitle[MAX_TITLE_LENGTH] = "";
 
 	if( iTextToShow == SHOW_MOTD )
 	{
 		if( !m_szServerName[0] )
-			strcpy( cTitle, "Half-Life" );
+			strcpy( cTitle, "Sven Co-op" );
 		else
 		{
 			strlcpy( cTitle, m_szServerName, MAX_TITLE_LENGTH );
 		}
 
-		cText = m_szMOTD;
+		cText = m_MOTD.last.c_str();
 	}
 	else if( iTextToShow == SHOW_MAPBRIEFING )
 	{
-		// Get the current mapname, and open it's map briefing text
-		if( m_sMapName[0] )
-		{
-			strcpy( sz, "maps/");
-			strcat( sz, m_sMapName );
-			strcat( sz, ".txt" );
-		}
-		else
-		{
-			const char *level = gEngfuncs.pfnGetLevelName();
-			if( !level )
-				return NULL;
-
-			strcpy( sz, level );
-			char *ch = strchr( sz, '.' );
-			*ch = '\0';
-			strcat( sz, ".txt" );
-
-			// pull out the map name
-			strcpy( m_sMapName, level );
-			ch = strchr( m_sMapName, '.' );
-			if( ch )
-			{
-				*ch = 0;
-			}
-
-			ch = strchr( m_sMapName, '/' );
-			if( ch )
-			{
-				// move the string back over the '/'
-				memmove( m_sMapName, ch + 1, strlen( ch ) + 1 );
-			}
-		}
-
-		pfile = (char*)gEngfuncs.COM_LoadFile( sz, 5, NULL );
-
-		if( !pfile )
-			return NULL;
+		// Sven map briefings are maps/<map>_motd.txt; retain the HL fallback.
+		char map[64];
+		const char *level = m_sMapName[0] ? m_sMapName : gEngfuncs.pfnGetLevelName();
+		if(!level || !*level) return NULL;
+		COM_FileBase(level,map);
+		for(const char *ch=map; *ch; ++ch)
+			if(!isalnum((unsigned char)*ch) && *ch!='_' && *ch!='-') return NULL;
+		strlcpy(m_sMapName,map,sizeof(m_sMapName));
+		snprintf(sz,sizeof(sz),"maps/%s_motd.txt",map);
+		pfile = (char *)gEngfuncs.COM_LoadFile(sz,5,NULL);
+		if(!pfile) { snprintf(sz,sizeof(sz),"maps/%s.txt",map); pfile=(char *)gEngfuncs.COM_LoadFile(sz,5,NULL); }
+		if(!pfile) return NULL;
 
 		cText = pfile;
 
@@ -1439,7 +1444,7 @@ CMenuPanel *TeamFortressViewport::CreateTextWindow( int iTextToShow )
 	}
 
 	// if we're in the game (ie. have selected a class), flag the menu to be only grayed in the dialog box, instead of full screen
-	CMenuPanel *pMOTDPanel = CMessageWindowPanel_Create( cText, cTitle, g_iPlayerClass == PC_UNDEFINED, false, 0, 0, ScreenWidth, ScreenHeight );
+	CMenuPanel *pMOTDPanel = CMessageWindowPanel_Create( cText, cTitle, g_iPlayerClass == PC_UNDEFINED, true, 0, 0, ScreenWidth, ScreenHeight );
 	pMOTDPanel->setParent( this );
 
 	if( pfile )
@@ -1470,7 +1475,7 @@ void TeamFortressViewport::ShowVGUIMenu( int iMenu )
 		CMenuPanel *pMenu = m_pCurrentMenu;
 		while( pMenu != NULL )
 		{
-			if( pMenu->GetMenuID() == iMenu )
+			if( pMenu->GetMenuID() == iMenu && iMenu != MENU_INTRO && iMenu != MENU_MAPBRIEFING )
 				return;
 
 			pMenu = pMenu->GetNextMenu();
@@ -1479,6 +1484,9 @@ void TeamFortressViewport::ShowVGUIMenu( int iMenu )
 
 	switch( iMenu )
 	{
+	case 22: case 23: case 24: case 25: case 26: case 30:
+		pNewMenu = SvenUI_CreateMenu( iMenu );
+		break;
 	case MENU_TEAM:		
 		pNewMenu = ShowTeamMenu(); 
 		break;
@@ -1513,6 +1521,7 @@ void TeamFortressViewport::ShowVGUIMenu( int iMenu )
 	// Close the Command Menu if it's open
 	HideCommandMenu();
 
+	pNewMenu->setVisible( false ); // queued dialogs must not draw beneath the current one
 	pNewMenu->SetMenuID( iMenu );
 	pNewMenu->SetActive( true );
 	pNewMenu->setParent( this );
@@ -1545,6 +1554,7 @@ void TeamFortressViewport::ShowVGUIMenu( int iMenu )
 // Removes all VGUI Menu's onscreen
 void TeamFortressViewport::HideVGUIMenu()
 {
+	if( SvenUI_CameraActive() ) { SvenUI_ExitCamera(); return; }
 	while( m_pCurrentMenu )
 	{
 		HideTopMenu();
@@ -1554,16 +1564,27 @@ void TeamFortressViewport::HideVGUIMenu()
 // Remove the top VGUI menu, and bring up the next one
 void TeamFortressViewport::HideTopMenu()
 {
-	if( m_pCurrentMenu )
-	{
-		// Close the top one
-		m_pCurrentMenu->Close();
+ if(SvenUI_CameraActive() && m_pCurrentMenu && m_pCurrentMenu->GetMenuID()==25) { SvenUI_ExitCamera(); return; }
+ if(m_pCurrentMenu) {
+  CMenuPanel *closed=m_pCurrentMenu, *next=closed->GetNextMenu();
+  closed->Close();
+  closed->Reset();
+  SetCurrentMenu(next);
+  if(closed->ShouldBeRemoved()) closed->setParent(this); // keep alive through the current input dispatch
+ }
+ UpdateCursorState();
+}
 
-		// Bring up the next one
-		gViewPort->SetCurrentMenu( m_pCurrentMenu->GetNextMenu() );
-	}
-
-	UpdateCursorState();
+void TeamFortressViewport::DismissMenu(int id)
+{
+ if(m_pCurrentMenu && m_pCurrentMenu->GetMenuID()==id) { HideTopMenu(); return; }
+ for(CMenuPanel *p=m_pCurrentMenu; p && p->GetNextMenu(); p=p->GetNextMenu()) {
+  CMenuPanel *next=p->GetNextMenu();
+  if(next->GetMenuID()!=id) continue;
+  p->ReplaceNextMenu(next->GetNextMenu()); next->Close(); next->Reset();
+  if(next->ShouldBeRemoved()) next->setParent(this);
+  return;
+ }
 }
 
 // Return TRUE if the HUD's allowed to print text messages
@@ -1651,6 +1672,8 @@ void TeamFortressViewport::UpdateOnPlayerInfo()
 
 void TeamFortressViewport::UpdateCursorState()
 {
+	SvenUI_Capture(m_pCurrentMenu || m_pCurrentCommandMenu);
+	if( SvenUI_CameraActive() ) { SvenUI_RefreshCursor(); return; }
 	// Need cursor if any VGUI window is up
 	if( m_pSpectatorPanel->m_menuVisible || m_pCurrentMenu || m_pTeamMenu->isVisible() || GetClientVoiceMgr()->IsInSquelchMode() )
 	{
@@ -1813,6 +1836,11 @@ int TeamFortressViewport::KeyInput( int down, int keynum, const char *pszCurrent
 	if( m_pCurrentMenu && gEngfuncs.Con_IsVisible() == false )
 	{
 		int iMenuID = m_pCurrentMenu->GetMenuID();
+		if( iMenuID >= 22 ) {
+   if(down && keynum == K_ESCAPE) HideTopMenu();
+   else if(down && keynum >= '0' && keynum <= '9') SlotInput(keynum-'0');
+   return 0;
+  }
 
 		// Get number keys as Input for Team/Class menus
 		if( iMenuID == MENU_TEAM || iMenuID == MENU_CLASS )
@@ -1961,9 +1989,13 @@ int TeamFortressViewport::MsgFunc_VGUIMenu( const char *pszName, int iSize, void
 	BEGIN_READ( pbuf, iSize );
 
 	int iMenu = READ_BYTE();
+	const int wireMenu = iMenu;
+	// Sven aliases used by servermotd/missionbriefing requests.
+	if(iMenu == 10) iMenu = MENU_INTRO;
+	else if(iMenu == 9 && strstr(gEngfuncs.pfnGetGameDirectory(), "svencoop")) iMenu = MENU_MAPBRIEFING;
 
 	// Map briefing includes the name of the map (because it's sent down before the client knows what map it is)
-	if( iMenu == MENU_MAPBRIEFING )
+	if( wireMenu == MENU_MAPBRIEFING )
 		strlcpy( m_sMapName, READ_STRING(), sizeof( m_sMapName ));
 
 	// Bring up the menu6
@@ -1972,30 +2004,13 @@ int TeamFortressViewport::MsgFunc_VGUIMenu( const char *pszName, int iSize, void
 	return 1;
 }
 
-int TeamFortressViewport::MsgFunc_MOTD( const char *pszName, int iSize, void *pbuf )
+int TeamFortressViewport::MsgFunc_MOTD( const char *, int size, void *data )
 {
-	if( m_iGotAllMOTD )
-		m_szMOTD[0] = 0;
-
-	BEGIN_READ( pbuf, iSize );
-
-	m_iGotAllMOTD = READ_BYTE();
-
-	strlcat( m_szMOTD, READ_STRING(), sizeof( m_szMOTD ));
-
-	// don't show MOTD for HLTV spectators
-	if( m_iGotAllMOTD )
-	{
-		if( m_szMOTD[0] )
-			ShowVGUIMenu( MENU_INTRO );
-	}
-	else
-	{
-		strncpy( m_szMOTD, "No server MOTD available.", sizeof( m_szMOTD ) );
-		ShowVGUIMenu( MENU_MAPBRIEFING );
-	}
-
-	return 1;
+ if(!m_MOTD.append(data,size)) return 0;
+ if(!m_MOTD.complete || gEngfuncs.IsSpectateOnly()) return 1;
+ if(!m_MOTD.last.empty()) ShowVGUIMenu(MENU_INTRO);
+ else ShowVGUIMenu(MENU_MAPBRIEFING);
+ return 1;
 }
 
 int TeamFortressViewport::MsgFunc_BuildSt( const char *pszName, int iSize, void *pbuf )
@@ -2161,4 +2176,18 @@ int TeamFortressViewport::MsgFunc_NextMap( const char *pszName, int iSize, void 
 	strncpy( gViewPort->m_sNextMapName, pszNextMap, sizeof( gViewPort->m_sNextMapName ) );
 
 	return 1;
+}
+
+void TeamFortressViewport::ShowMissionBriefing()
+{
+ CMenuPanel *briefing = CreateTextWindow(SHOW_MAPBRIEFING);
+ if(!briefing) return;
+ briefing->SetMenuID(MENU_MAPBRIEFING);
+ briefing->SetActive(true);
+ briefing->setVisible(false);
+ if(m_pCurrentMenu) {
+  briefing->SetNextMenu(m_pCurrentMenu->GetNextMenu());
+  m_pCurrentMenu->ReplaceNextMenu(briefing);
+  HideTopMenu();
+ } else { SetCurrentMenu(briefing); UpdateCursorState(); }
 }

@@ -13,6 +13,7 @@
 // rights reserved.
 
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
 #include "cl_entity.h"
 #include "camera.h"
@@ -382,6 +383,7 @@ Return 1 to allow engine to process the key, otherwise, act on it as needed
 */
 int DLLEXPORT HUD_Key_Event( int down, int keynum, const char *pszCurrentBinding )
 {
+	if( SvenUI_CameraActive() ) return SvenUI_Key(down,keynum);
 #if USE_VGUI
 	if (gViewPort)
 		return gViewPort->KeyInput(down, keynum, pszCurrentBinding);
@@ -872,6 +874,11 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 	// set button and flag bits
 	//
 	cmd->buttons = CL_ButtonBits( 1 );
+	if( SvenUI_Capturing() )
+	{
+		cmd->buttons = 0;
+		cmd->forwardmove = cmd->sidemove = cmd->upmove = 0;
+	}
 
 #if USE_VGUI
 	// If they're in a modal dialog, ignore the attack button.
