@@ -1175,11 +1175,15 @@ void PM_WalkMove( void )
 
 	//
 	// Clamp to server defined max speed
+	// NOTE (Sven parity, client.so WalkMove 0x16a3d6 compares against
+	// pmove->clientmaxspeed, never pmove->maxspeed): the CheckParamters
+	// normalization above already bounds the input, this clamp only matters
+	// when clientmaxspeed exceeds movevars.maxspeed (sprint/haste).
 	//
-	if( wishspeed > pmove->maxspeed )
+	if( wishspeed > pmove->clientmaxspeed )
 	{
-		VectorScale( wishvel, pmove->maxspeed / wishspeed, wishvel );
-		wishspeed = pmove->maxspeed;
+		VectorScale( wishvel, pmove->clientmaxspeed / wishspeed, wishvel );
+		wishspeed = pmove->clientmaxspeed;
 	}
 
 	// Set pmove velocity
@@ -2916,34 +2920,57 @@ PM_CheckParamters
 void PM_CheckParamters( void )
 {
 	float spd;
-	float maxspeed;
 	vec3_t v_angle;
 
-	spd = ( pmove->cmd.forwardmove * pmove->cmd.forwardmove ) + ( pmove->cmd.sidemove * pmove->cmd.sidemove ) +
-		( pmove->cmd.upmove * pmove->cmd.upmove );
-	spd = sqrt( spd );
-
-	maxspeed = pmove->clientmaxspeed; //atof( pmove->PM_Info_ValueForKey( pmove->physinfo, "maxspd" ) );
-	if( maxspeed != 0.0f )
+	// NOTE (Sven parity, client.so 0x168388 — behavior verified by emulation
+	// over 20+ input/maxspeed combinations): Sven normalizes the move input
+	// against clientmaxspeed ONLY (never touches pmove->maxspeed here):
+	// scale by clientmaxspeed/255, clamp per-axis to +/-clientmaxspeed,
+	// then clamp the 3D length to clientmaxspeed. clientmaxspeed <= 0 zeroes
+	// the moves. There is NO IN_USE slowdown anywhere in Sven's shared pmove
+	// (no 0x20 button test in the whole PM range), so the old HL maxspeed/3
+	// block below is deleted, not just disabled — it manufactured prediction
+	// errors against Sven servers on every E-holding update.
+	if( pmove->clientmaxspeed <= 0.0f )
 	{
-		pmove->maxspeed = min( maxspeed, pmove->maxspeed );
+		pmove->cmd.forwardmove = pmove->cmd.sidemove = pmove->cmd.upmove = 0;
 	}
-
-	// Slow down, I'm pulling it! (a box maybe) but only when I'm standing on ground
-	//
-	// JoshA: Moved this to CheckParamters rather than working on the velocity,
-	// as otherwise it affects every integration step incorrectly.
-	if( ( pmove->onground != -1 ) && ( pmove->cmd.buttons & IN_USE ))
+	else
 	{
-		pmove->maxspeed *= 1.0f / 3.0f;
-	}
+		const float scale = pmove->clientmaxspeed / 255.0f;
 
-	if( ( spd != 0.0f ) && ( spd > pmove->maxspeed ) )
-	{
-		float fRatio = pmove->maxspeed / spd;
-		pmove->cmd.forwardmove *= fRatio;
-		pmove->cmd.sidemove *= fRatio;
-		pmove->cmd.upmove *= fRatio;
+		pmove->cmd.forwardmove *= scale;
+		pmove->cmd.sidemove *= scale;
+		pmove->cmd.upmove *= scale;
+
+		if( pmove->cmd.forwardmove > pmove->clientmaxspeed )
+			pmove->cmd.forwardmove = pmove->clientmaxspeed;
+		else if( pmove->cmd.forwardmove < -pmove->clientmaxspeed )
+			pmove->cmd.forwardmove = -pmove->clientmaxspeed;
+
+		if( pmove->cmd.sidemove > pmove->clientmaxspeed )
+			pmove->cmd.sidemove = pmove->clientmaxspeed;
+		else if( pmove->cmd.sidemove < -pmove->clientmaxspeed )
+			pmove->cmd.sidemove = -pmove->clientmaxspeed;
+
+		if( pmove->cmd.upmove > pmove->clientmaxspeed )
+			pmove->cmd.upmove = pmove->clientmaxspeed;
+		else if( pmove->cmd.upmove < -pmove->clientmaxspeed )
+			pmove->cmd.upmove = -pmove->clientmaxspeed;
+
+		spd = ( pmove->cmd.forwardmove * pmove->cmd.forwardmove ) +
+			( pmove->cmd.sidemove * pmove->cmd.sidemove ) +
+			( pmove->cmd.upmove * pmove->cmd.upmove );
+		spd = sqrt( spd );
+
+		if( spd > pmove->clientmaxspeed )
+		{
+			const float fRatio = pmove->clientmaxspeed / spd;
+
+			pmove->cmd.forwardmove *= fRatio;
+			pmove->cmd.sidemove *= fRatio;
+			pmove->cmd.upmove *= fRatio;
+		}
 	}
 
 	if( pmove->flags & FL_FROZEN ||  pmove->flags & FL_ONTRAIN || pmove->dead )
