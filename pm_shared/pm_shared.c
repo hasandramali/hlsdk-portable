@@ -1006,7 +1006,12 @@ int PM_FlyMove( void )
 		// reflect player velocity
 		// Only give this a try for first impact plane because you can get yourself stuck in an acute corner by jumping in place
 		// and pressing forward and nobody was really using this bounce/reflection feature anyway...
-		if( numplanes == 1 && pmove->movetype == MOVETYPE_WALK && ( ( pmove->onground == -1 ) || ( pmove->friction != 1 )))
+		// NOTE (Sven parity, client.so @0x1699FE-0x169A3A): Sven takes this
+		// branch when onground <= 0 (airborne OR standing on world entity 0)
+		// with NO friction test. The old (onground == -1 || friction != 1)
+		// form skipped the ground-contact reflection on plain walking and
+		// produced a systematic ~0.5u prediction error every update.
+		if( numplanes == 1 && pmove->movetype == MOVETYPE_WALK && pmove->onground <= 0 )
 		{
 			for( i = 0; i < numplanes; i++ )
 			{
@@ -3398,9 +3403,16 @@ void PM_Move( struct playermove_s *ppmove, int server )
 
 	// Reset friction after each movement to FrictionModifier Triggers work still.
 	// Use movevar to avoid lags with different clients and servers.
-	if( !( pmove->multiplayer && atoi( pmove->PM_Info_ValueForKey( pmove->physinfo, "fr" )) == 0 ) && pmove->movetype == MOVETYPE_WALK )
+	// NOTE (Sven parity, client.so @0x170267): Sven resets unconditionally
+	// for MOVETYPE_WALK. A missing "fr" key (Sven servers never send it)
+	// means Sven behavior (reset); an explicit "0" keeps the hlsdk
+	// FrictionModifier opt-out.
+	if( pmove->movetype == MOVETYPE_WALK )
 	{
-		pmove->friction = 1.0f;
+		const char *fr = pmove->PM_Info_ValueForKey( pmove->physinfo, "fr" );
+
+		if( !pmove->multiplayer || !fr || !*fr || atoi( fr ) != 0 )
+			pmove->friction = 1.0f;
 	}
 }
 
