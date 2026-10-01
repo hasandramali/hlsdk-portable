@@ -843,9 +843,11 @@ int PM_ClipVelocity( vec3_t in, vec3_t normal, vec3_t out, float overbounce )
 	{
 		change = normal[i] * backoff;
 		out[i] = in[i] - change;
-		// If out velocity is too small, zero it out.
-		if( out[i] > -STOP_EPSILON && out[i] < STOP_EPSILON )
-			out[i] = 0;
+		// NOTE (Sven parity, client.so 0x16894e emulated): Sven does NOT
+		// zero sub-STOP_EPSILON components here. The old zeroing made our
+		// client stop dead on <0.1 slide residuals while the server keeps
+		// creeping, producing a systematic ~0.1 prediction error on every
+		// wall-contact update. Do NOT re-add without proof.
 	}
 
 	// Return blocking flags.
