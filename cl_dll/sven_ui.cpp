@@ -198,6 +198,7 @@ void SvenUI_ExitCamera()
 #include <VGUI_SurfaceBase.h>
 #include <VGUI_Bitmap.h>
 #include <VGUI_Cursor.h>
+#include <VGUI_LineBorder.h>
 #include "input_mouse.h"
 
 class SvenMenu;
@@ -214,6 +215,18 @@ public:
  MenuAction(SvenMenu *p,int a,int v=0):owner(p),action(a),value(v) {}
  void actionPerformed(vgui::Panel *);
 };
+class SvenButton: public vgui::Button
+{
+public:
+ SvenButton(const char *text,int x,int y,int w,int h):vgui::Button(text,x,y,w,h) {}
+ void paintBackground() {
+  int w,h;getPaintSize(w,h);drawSetColor(0,0,0,100);drawFilledRect(0,0,w,h);
+  int thickness=isSelected()?3:1;
+  drawSetColor(210,220,230,40);
+  drawFilledRect(0,0,w,thickness);drawFilledRect(0,h-thickness,w,h);
+  drawFilledRect(0,0,thickness,h);drawFilledRect(w-thickness,0,w,h);
+ }
+};
 class SvenMenu: public CMenuPanel
 {
  vgui::Label *title,*detail;
@@ -225,8 +238,8 @@ public:
  SvenMenu(int id): CMenuPanel(80,0,XRES(60),YRES(30),XRES(520),YRES(420)),seen(~0u),page(0),choice(0),kind(id),selected(-1)
  {
   SetMenuID(id);
-  title=new vgui::Label("",XRES(12),YRES(8),XRES(490),YRES(30)); title->setParent(this);
-  detail=new vgui::Label("",XRES(12),YRES(312),XRES(490),YRES(53)); detail->setParent(this);
+  title=new vgui::Label("",XRES(12),YRES(8),XRES(490),YRES(30)); title->setParent(this); title->setBgColor(0,0,0,140); title->setFgColor(245,245,245,0); title->setContentAlignment(vgui::Label::a_west); title->setBorder(new vgui::LineBorder(vgui::Color(210,220,230,40)));
+  detail=new vgui::Label("",XRES(12),YRES(312),XRES(490),YRES(53)); detail->setParent(this); detail->setBgColor(0,0,0,180); detail->setFgColor(245,245,245,0);
   for(int i=0;i<4;++i) tabs[i]=Button("",12+i*124,44,120,30,10,i);
   for(int i=0;i<8;++i) rows[i]=Button("",12,80+i*28,496,26,20,i);
   previous=Button("<",12,378,65,30,30,-1);
@@ -236,7 +249,7 @@ public:
  }
  vgui::Button *Button(const char *s,int x,int y,int w,int h,int a,int v=0)
  {
-  vgui::Button *b=new vgui::Button(s,XRES(x),YRES(y),XRES(w),YRES(h)); b->setParent(this);
+  vgui::Button *b=new SvenButton(s,XRES(x),YRES(y),XRES(w),YRES(h)); b->setParent(this);
   b->setFont(vgui::Scheme::sf_primary3); b->setBgColor(20,30,40,120); b->setFgColor(235,240,255,0);
   b->addActionSignal(new MenuAction(this,a,v)); return b;
  }
@@ -258,7 +271,8 @@ public:
   if(kind==22 || kind==23) {
    const char *labels[]={"Vote kick","Vote ban","Vote kill","Vote map"};
    for(int i=0;i<4;++i) { tabs[i]->setText("%s",labels[i]); tabs[i]->setVisible(true); }
-   title->setText("%s","Sven Co-op - Vote");
+   const char *headings[]={"Vote Kick","Vote Ban","Vote Kill","Vote Map"};
+   title->setText("%s",headings[choice]);
    if(choice==3) names=maps;
    else {
     playerIds.clear();

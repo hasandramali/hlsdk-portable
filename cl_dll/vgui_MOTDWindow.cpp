@@ -51,29 +51,44 @@ public:
 class CMessageWindowPanel : public CMenuPanel
 {
 public:
-	CMessageWindowPanel( const char *szMOTD, const char *szTitle, int iShadeFullScreen, int iRemoveMe, int x, int y, int wide, int tall );
+	CMessageWindowPanel( const char *szMOTD, const char *szTitle, int iShadeFullScreen, int iRemoveMe, int x, int y, int wide, int tall, const char *briefingText, bool showBriefing );
 
 private:
 	CTransparentPanel *m_pBackgroundPanel;
 	CommandButton *m_pBriefingButton;
+ TextPanel *m_pText;
+ ScrollPanel *m_pScroll;
+ std::string m_mainText, m_briefingText;
+ bool m_showingBriefing, m_hasBriefing;
 public:
-	void Open() { CMenuPanel::Open(); m_pBriefingButton->setVisible(GetMenuID() == MENU_INTRO); }
+	void Open() { CMenuPanel::Open(); m_pBriefingButton->setVisible(m_hasBriefing); }
+ bool ToggleBriefing() {
+  if(!m_hasBriefing) return false;
+  m_showingBriefing=!m_showingBriefing;
+  m_pText->setText((m_showingBriefing?m_briefingText:m_mainText).c_str());
+  m_pText->getTextImage()->setSize(m_pScroll->getClientClip()->getWide(),m_pScroll->getClientClip()->getTall());
+  int w,h; m_pText->getTextImage()->getTextSizeWrapped(w,h); m_pText->setSize(w,h);
+  m_pScroll->setScrollValue(0,0); m_pScroll->validate();
+  m_pBriefingButton->setText(m_showingBriefing?"<< Msg of the day":"Mission Briefing >>");
+  return true;
+ }
 };
 
 //-----------------------------------------------------------------------------
 // Purpose: Creates a new CMessageWindowPanel
 // Output : CMenuPanel - interface to the panel
 //-----------------------------------------------------------------------------
-CMenuPanel *CMessageWindowPanel_Create( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall )
+CMenuPanel *CMessageWindowPanel_Create( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall, const char *briefingText, bool showBriefing )
 {
-	return new CMessageWindowPanel( szMOTD, szTitle, iShadeFullscreen, iRemoveMe, x, y, wide, tall );
+	return new CMessageWindowPanel( szMOTD, szTitle, iShadeFullscreen, iRemoveMe, x, y, wide, tall, briefingText, showBriefing );
 }
 
 //-----------------------------------------------------------------------------
 // Purpose: Constructs a message panel
 //-----------------------------------------------------------------------------
-CMessageWindowPanel::CMessageWindowPanel( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall ) : CMenuPanel( iShadeFullscreen ? 100 : 255, iRemoveMe, x, y, wide, tall )
+CMessageWindowPanel::CMessageWindowPanel( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall, const char *briefingText, bool showBriefing ) : CMenuPanel( iShadeFullscreen ? 100 : 255, iRemoveMe, x, y, wide, tall )
 {
+	m_mainText=szMOTD; m_briefingText=briefingText?briefingText:""; m_hasBriefing=briefingText!=NULL; m_showingBriefing=showBriefing;
 	// Get the scheme used for the Titles
 	CSchemeManager *pSchemes = gViewPort->GetSchemeManager();
 
@@ -127,7 +142,8 @@ CMessageWindowPanel::CMessageWindowPanel( const char *szMOTD, const char *szTitl
 	pText->setFgColor( r, g, b, a );
 	pSchemes->getBgColor( hMOTDText, r, g, b, a );
 	pText->setBgColor( r, g, b, a );
-	pText->setText( szMOTD );
+	m_pText=pText; m_pScroll=pScrollPanel;
+	pText->setText( (m_showingBriefing?m_briefingText:m_mainText).c_str() );
 
 	// Get the total size of the MOTD text and resize the text panel
 	int iScrollSizeX, iScrollSizeY;
@@ -151,7 +167,7 @@ CMessageWindowPanel::CMessageWindowPanel( const char *szMOTD, const char *szTitl
 	CommandButton *pButton = new CommandButton( CHudTextMessage::BufferedLocaliseTextString( "#Menu_OK" ), iXPos + XRES( 16 ), iYPos + iYSize - YRES( 16 ) - BUTTON_SIZE_Y, CMENU_SIZE_X, BUTTON_SIZE_Y );
 	pButton->addActionSignal( new CMenuHandler_TextWindow( HIDE_TEXTWINDOW ) );
 	pButton->setParent( this );
-	CommandButton *briefing = new CommandButton("Mission Briefing >>",iXPos + XRES(184),iYPos + iYSize - YRES(16) - BUTTON_SIZE_Y,XRES(224),BUTTON_SIZE_Y);
+	CommandButton *briefing = new CommandButton(m_showingBriefing?"<< Msg of the day":"Mission Briefing >>",iXPos + XRES(24) + CMENU_SIZE_X,iYPos + iYSize - YRES(16) - BUTTON_SIZE_Y,CMENU_SIZE_X,BUTTON_SIZE_Y);
 	briefing->addActionSignal(new MissionBriefingAction);
 	briefing->setParent(this);
 	m_pBriefingButton = briefing;

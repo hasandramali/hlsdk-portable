@@ -77,7 +77,7 @@ class CCommandMenu;
 #define SBOARD_INDENT_Y_400		20
 
 void IN_ResetMouse( void );
-extern CMenuPanel *CMessageWindowPanel_Create( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall );
+extern CMenuPanel *CMessageWindowPanel_Create( const char *szMOTD, const char *szTitle, int iShadeFullscreen, int iRemoveMe, int x, int y, int wide, int tall, const char *briefingText, bool showBriefing );
 extern float *GetClientColor( int clientIndex );
 
 using namespace vgui;
@@ -1401,36 +1401,30 @@ CMenuPanel *TeamFortressViewport::CreateTextWindow( int iTextToShow )
 	static const int MAX_TITLE_LENGTH = 64;
 	char cTitle[MAX_TITLE_LENGTH] = "";
 
-	if( iTextToShow == SHOW_MOTD )
-	{
-		if( !m_szServerName[0] )
-			strcpy( cTitle, "Sven Co-op" );
-		else
-		{
-			strlcpy( cTitle, m_szServerName, MAX_TITLE_LENGTH );
-		}
-
-		cText = m_MOTD.last.c_str();
-	}
-	else if( iTextToShow == SHOW_MAPBRIEFING )
-	{
-		// Sven map briefings are maps/<map>_motd.txt; retain the HL fallback.
-		char map[64];
-		const char *level = m_sMapName[0] ? m_sMapName : gEngfuncs.pfnGetLevelName();
-		if(!level || !*level) return NULL;
-		COM_FileBase(level,map);
-		for(const char *ch=map; *ch; ++ch)
-			if(!isalnum((unsigned char)*ch) && *ch!='_' && *ch!='-') return NULL;
-		strlcpy(m_sMapName,map,sizeof(m_sMapName));
-		snprintf(sz,sizeof(sz),"maps/%s_motd.txt",map);
-		pfile = (char *)gEngfuncs.COM_LoadFile(sz,5,NULL);
-		if(!pfile) { snprintf(sz,sizeof(sz),"maps/%s.txt",map); pfile=(char *)gEngfuncs.COM_LoadFile(sz,5,NULL); }
-		if(!pfile) return NULL;
-
-		cText = pfile;
-
-		strlcpy( cTitle, m_sMapName, MAX_TITLE_LENGTH );
-	}
+ std::string mainText=m_MOTD.last, briefingText;
+ bool briefingAvailable=false, localMotd=false;
+ if(iTextToShow==SHOW_MOTD || iTextToShow==SHOW_MAPBRIEFING) {
+  char map[256]={};
+  const char *level=m_sMapName[0]?m_sMapName:gEngfuncs.pfnGetLevelName();
+  if(level && *level) COM_FileBase(level,map);
+  bool safe=map[0]!=0;
+  for(const char *ch=map;*ch;++ch) if(!isalnum((unsigned char)*ch) && *ch!='_' && *ch!='-') safe=false;
+  if(safe) {
+   snprintf(sz,sizeof(sz),"maps/%.200s_motd.txt",map);
+   char *file=(char *)gEngfuncs.COM_LoadFile(sz,5,NULL);
+   if(file) {mainText=file;localMotd=true;gEngfuncs.COM_FreeFile(file);}
+   snprintf(sz,sizeof(sz),"maps/%.200s.txt",map);
+   file=(char *)gEngfuncs.COM_LoadFile(sz,5,NULL);
+   if(file) {briefingText=file;briefingAvailable=true;gEngfuncs.COM_FreeFile(file);}
+  }
+  if(mainText.empty() && !localMotd) {
+   char *file=(char *)gEngfuncs.COM_LoadFile("motd.txt",5,NULL);
+   if(file) {mainText=file;gEngfuncs.COM_FreeFile(file);}
+  }
+  if(iTextToShow==SHOW_MAPBRIEFING && !briefingAvailable) return NULL;
+  strlcpy(cTitle,m_szServerName[0]?m_szServerName:"Sven Co-op",sizeof(cTitle));
+  cText=mainText.c_str();
+ }
 	else if( iTextToShow == SHOW_SPECHELP )
 	{
 		CHudTextMessage::LocaliseTextString( "#Spec_Help_Title", cTitle, MAX_TITLE_LENGTH );
@@ -1444,7 +1438,7 @@ CMenuPanel *TeamFortressViewport::CreateTextWindow( int iTextToShow )
 	}
 
 	// if we're in the game (ie. have selected a class), flag the menu to be only grayed in the dialog box, instead of full screen
-	CMenuPanel *pMOTDPanel = CMessageWindowPanel_Create( cText, cTitle, g_iPlayerClass == PC_UNDEFINED, true, 0, 0, ScreenWidth, ScreenHeight );
+	CMenuPanel *pMOTDPanel = CMessageWindowPanel_Create( cText, cTitle, g_iPlayerClass == PC_UNDEFINED, true, 0, 0, ScreenWidth, ScreenHeight, briefingAvailable?briefingText.c_str():NULL, iTextToShow==SHOW_MAPBRIEFING );
 	pMOTDPanel->setParent( this );
 
 	if( pfile )
@@ -2008,8 +2002,7 @@ int TeamFortressViewport::MsgFunc_MOTD( const char *, int size, void *data )
 {
  if(!m_MOTD.append(data,size)) return 0;
  if(!m_MOTD.complete || gEngfuncs.IsSpectateOnly()) return 1;
- if(!m_MOTD.last.empty()) ShowVGUIMenu(MENU_INTRO);
- else ShowVGUIMenu(MENU_MAPBRIEFING);
+ ShowVGUIMenu(MENU_INTRO);
  return 1;
 }
 
@@ -2180,14 +2173,6 @@ int TeamFortressViewport::MsgFunc_NextMap( const char *pszName, int iSize, void 
 
 void TeamFortressViewport::ShowMissionBriefing()
 {
- CMenuPanel *briefing = CreateTextWindow(SHOW_MAPBRIEFING);
- if(!briefing) return;
- briefing->SetMenuID(MENU_MAPBRIEFING);
- briefing->SetActive(true);
- briefing->setVisible(false);
- if(m_pCurrentMenu) {
-  briefing->SetNextMenu(m_pCurrentMenu->GetNextMenu());
-  m_pCurrentMenu->ReplaceNextMenu(briefing);
-  HideTopMenu();
- } else { SetCurrentMenu(briefing); UpdateCursorState(); }
+ if(m_pCurrentMenu && m_pCurrentMenu->ToggleBriefing()) return;
+ ShowVGUIMenu(MENU_MAPBRIEFING);
 }

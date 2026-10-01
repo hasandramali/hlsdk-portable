@@ -79,7 +79,10 @@ inline bool ReadMaps(const void *data,int size,std::vector<std::string> &maps)
  if(mode) { first=r.shortInt(); end=r.shortInt(); } else end=r.shortInt();
  if(!r.ok || first<0 || end<first || end>4096 || (mode && end>(int)maps.size())) return false;
  std::vector<std::string> next=mode ? maps : std::vector<std::string>(end);
- for(int i=first;i<end;++i) next[i]=r.string();
+ // Sven sends at most five entries in the initial packet; its SHORT
+ // is the total allocation size, not the number of strings in this chunk.
+ int chunkEnd=mode ? end : std::min(end,5);
+ for(int i=first;i<chunkEnd;++i) next[i]=r.string();
  if(!r.done()) return false;
  maps.swap(next); return true;
 }

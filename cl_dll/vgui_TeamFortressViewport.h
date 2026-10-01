@@ -1565,6 +1565,7 @@ public:
 
 	// Numeric input
 	virtual bool SlotInput( int iSlot ) { return false; };
+	virtual bool ToggleBriefing() { return false; }
 	virtual void SetActiveInfo( int iInput ) {};
 };
 
