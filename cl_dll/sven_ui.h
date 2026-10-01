@@ -1,6 +1,6 @@
 #pragma once
 void SvenUI_Init();
-void SvenUI_Reset();
+void SvenUI_Reset(bool preserveMaps = false);
 void SvenUI_CloseKeyboard();
 void SvenUI_Shutdown();
 void SvenUI_VidInit();

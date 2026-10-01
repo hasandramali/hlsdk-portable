@@ -69,7 +69,8 @@ void CHud::MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
-	SvenUI_Reset();
+	// MapList arrives during signon, before InitHUD. Keep the received list.
+	SvenUI_Reset(true);
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
 

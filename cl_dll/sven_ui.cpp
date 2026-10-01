@@ -238,7 +238,13 @@ public:
  SvenMenu(int id): CMenuPanel(80,0,XRES(60),YRES(30),XRES(520),YRES(420)),seen(~0u),page(0),choice(0),kind(id),selected(-1)
  {
   SetMenuID(id);
-  title=new vgui::Label("",XRES(12),YRES(8),XRES(490),YRES(30)); title->setParent(this); title->setBgColor(0,0,0,140); title->setFgColor(245,245,245,0); title->setContentAlignment(vgui::Label::a_west); title->setBorder(new vgui::LineBorder(vgui::Color(210,220,230,40)));
+  title=new vgui::Label("",XRES(12),YRES(8),XRES(id==22 || id==23 || id==24 ? 320 : 490),YRES(30)); title->setParent(this); title->setBgColor(0,0,0,140); title->setFgColor(245,245,245,0); title->setContentAlignment(vgui::Label::a_west); title->setBorder(new vgui::LineBorder(vgui::Color(210,220,230,40)));
+  if(id==22 || id==23 || id==24) {
+   vgui::Label *caption=new vgui::Label("VOTE MENU",XRES(340),YRES(8),XRES(162),YRES(30));
+   caption->setParent(this); caption->setBgColor(0,0,0,140); caption->setFgColor(245,245,245,0);
+   caption->setContentAlignment(vgui::Label::a_east);
+   caption->setBorder(new vgui::LineBorder(vgui::Color(210,220,230,40)));
+  }
   detail=new vgui::Label("",XRES(12),YRES(312),XRES(490),YRES(53)); detail->setParent(this); detail->setBgColor(0,0,0,180); detail->setFgColor(245,245,245,0);
   for(int i=0;i<4;++i) tabs[i]=Button("",12+i*124,44,120,30,10,i);
   for(int i=0;i<8;++i) rows[i]=Button("",12,80+i*28,496,26,20,i);
@@ -568,9 +574,9 @@ void SvenUI_CloseKeyboard()
  if(keyboard && gMobileEngfuncs) gMobileEngfuncs->pfnEnableTextInput(false);
  keyboard=false;
 }
-void SvenUI_Reset()
+void SvenUI_Reset(bool preserveMaps)
 {
- camera=SvenUI::Camera(); cameraSprite=0; SvenUI_Capture(false); mapEntities.clear(); items.clear(); maps.clear(); voteEnd=0; Refresh();
+ camera=SvenUI::Camera(); cameraSprite=0; SvenUI_Capture(false); mapEntities.clear(); items.clear(); if(!preserveMaps) maps.clear(); voteEnd=0; Refresh();
  SvenUI_CloseKeyboard(); dragFinger=-1; for(int i=0;i<4;++i) fingers[i]=-1;
  gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",0);
  if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(false);
