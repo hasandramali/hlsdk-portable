@@ -938,6 +938,12 @@ int PM_FlyMove( void )
 		// See if we can make it from origin to end point.
 		trace = pmove->PM_PlayerTrace( pmove->origin, end, PM_NORMAL, -1 );
 
+		// NOTE (Sven parity, client.dll FlyMove 0x100a324e): sub-1e-4
+		// fractions are zeroed before anything else. Prevents
+		// micro-fraction shell cases from counting as movement below.
+		if( trace.fraction < 1e-4f )
+			trace.fraction = 0;
+
 		allFraction += trace.fraction;
 		// If we started in a solid object, or we were in solid space
 		//  the whole way, zero out our velocity and return that we
@@ -950,9 +956,14 @@ int PM_FlyMove( void )
 		}
 
 		// If we moved some portion of the total distance, then
-		//  copy the end position into the pmove->origin and 
+		//  copy the end position into the pmove->origin and
 		//  zero the plane counter.
-		if( trace.fraction > 0 )
+		// NOTE (Sven parity, client.dll FlyMove 0x100a3281): Sven only
+		// accepts the trace when fraction > 1/32. Sub-1/32 micro-traces
+		// (constant on stair edges / ramp lips) keep the old origin on
+		// the server while the old `> 0` test crept us forward every
+		// frame, another systematic prediction drift source.
+		if( trace.fraction > 0.03125f )
 		{	// actually covered some distance
 			VectorCopy( trace.endpos, pmove->origin );
 			VectorCopy( pmove->velocity, original_velocity );
@@ -1032,9 +1043,22 @@ int PM_FlyMove( void )
 		}
 		else
 		{
+			// NOTE (Sven parity, client.dll FlyMove 0x100a3581-0x100a36c4):
+			// Sven does NOT ClipVelocity(original, plane, 1.0) here. It
+			// clips the CURRENT velocity against each plane, removing at
+			// most 1/32 of into-plane motion per plane (anti-stick: soft
+			// contacts keep sliding instead of dying to a full clip), then
+			// verifies against every plane like below. Full ClipVelocity
+			// killed sliding residuals the server keeps, another steady
+			// drift on ramps/stairs. Do NOT revert without proof.
 			for( i = 0; i < numplanes; i++ )
 			{
-				PM_ClipVelocity( original_velocity, planes[i], pmove->velocity, 1 );
+				float d = DotProduct( pmove->velocity, planes[i] );
+				if( d < 0 )
+				{
+					float k = ( d < -1.0f / 32.0f ) ? d : ( -1.0f / 32.0f );
+					VectorMA( pmove->velocity, -k, planes[i], pmove->velocity );
+				}
 				for( j = 0; j < numplanes; j++ )
 					if( j != i )
 					{
@@ -1275,11 +1299,13 @@ void PM_WalkMove( void )
 
 	trace = pmove->PM_PlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
 
-	// If we are not on the ground any more then
-	//  use the original movement attempt
-	if( trace.plane.normal[2] < 0.7f )
-		goto usedown;
-
+	// NOTE (Sven parity, client.dll PM step 0x100a44be-0x100a452d): Sven
+	// has NO steep-plane check on the down-trace. It goes straight from
+	// the startsolid/allsolid copy to the downdist-vs-updist compare. The
+	// old `normal[2] < 0.7 -> usedown` gate made our client drop to the
+	// low (slide) position on every stair lip / surf edge the server keeps
+	// as up, producing the systematic server-above-pred +z bias with
+	// visible hitches. Do NOT re-add without proof.
 	// If the trace ended up in empty space, copy the end
 	//  over to the origin.
 	if( !trace.startsolid && !trace.allsolid )
@@ -1556,10 +1582,15 @@ void PM_AirMove( void )
 	wishspeed = VectorNormalize( wishdir );
 
 	// Clamp to server defined max speed
-	if( wishspeed > pmove->maxspeed )
+	// NOTE (Sven parity, client.dll air-move 0x100a2f21): Sven clamps air
+	// wishspeed against clientmaxspeed ([pmove+0x1f8]), same as the ground
+	// path. The old pmove->maxspeed (movevars, usually larger) let our
+	// client air-accelerate harder than the server on every airborne
+	// frame (surf! jumps!), a direct airborne divergence source.
+	if( wishspeed > pmove->clientmaxspeed )
 	{
-		VectorScale( wishvel, pmove->maxspeed/wishspeed, wishvel );
-		wishspeed = pmove->maxspeed;
+		VectorScale( wishvel, pmove->clientmaxspeed/wishspeed, wishvel );
+		wishspeed = pmove->clientmaxspeed;
 	}
 	
 	PM_AirAccelerate( wishdir, wishspeed, pmove->movevars->airaccelerate );
@@ -1672,6 +1703,16 @@ void PM_CatagorizePosition( void )
 	// this several times per frame, so we really need to avoid sticking to the bottom of
 	// water on each call, and the converse case will correct itself if called twice.
 	PM_CheckWater();
+
+	// NOTE (Sven parity, client.dll Catagorize 0x100a148b): flying and
+	// noclipping players skip the ground trace entirely (onground = -1).
+	// Without this our client ground-snaps/routes fly movement through
+	// walk logic the server never runs.
+	if( pmove->movetype == MOVETYPE_NOCLIP || pmove->movetype == MOVETYPE_FLY )
+	{
+		pmove->onground = -1;
+		return;
+	}
 
 	point[0] = pmove->origin[0];
 	point[1] = pmove->origin[1];
@@ -3051,6 +3092,23 @@ Numtouch and touchindex[] will be set if any of the physents
 were contacted during the move.
 =============
 */
+/*
+==================
+PM_ResetWalkFriction
+
+NOTE (Sven parity, client.dll PlayerMove wrapper 0x100a144b): after every
+player move with movetype WALK, Sven forces pmove->friction back to 1.0.
+Anything that lowered it mid-frame (ladders, trigger_friction, vehicle
+code) must not leak into the next frame's Accelerate/Friction scaling on
+either side. Cheap insurance, do not remove.
+==================
+*/
+static void PM_ResetWalkFriction( void )
+{
+	if( pmove->movetype == MOVETYPE_WALK )
+		pmove->friction = 1.0f;
+}
+
 void PM_PlayerMove( qboolean server )
 {
 	physent_t *pLadder = NULL;
@@ -3079,6 +3137,7 @@ void PM_PlayerMove( qboolean server )
 	{
 		PM_SpectatorMove();
 		PM_CatagorizePosition();
+		PM_ResetWalkFriction();
 		return;
 	}
 
@@ -3091,7 +3150,10 @@ void PM_PlayerMove( qboolean server )
 			PM_Duck();
 
 			if( PM_CheckStuck() )
+			{
+				PM_ResetWalkFriction();
 				return;  // Can't move, we're stuck
+			}
 		}
 	}
 
@@ -3189,6 +3251,7 @@ void PM_PlayerMove( qboolean server )
 
 			// Make sure waterlevel is set correctly
 			PM_CheckWater();
+			PM_ResetWalkFriction();
 			return;
 		}
 
@@ -3292,6 +3355,7 @@ void PM_PlayerMove( qboolean server )
 
 		// Did we enter or leave the water?
 		PM_PlayWaterSounds();
+		PM_ResetWalkFriction();
 		break;
 	}
 }
