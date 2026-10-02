@@ -426,6 +426,14 @@ void DLLEXPORT HUD_TxferPredictionData( struct entity_state_s *ps, const struct 
 	pcd->fuser3					= ppcd->fuser3;
 	pcd->fuser4					= ppcd->fuser4;
 
+	// Sven minigun jump-inhibit must already hold on the snapshot-derived
+	// state, otherwise the first predicted command after every snapshot
+	// jumps (server never transmits fuser4) and snaps back. The server's
+	// current weapon id IS transmitted, so derive it deterministically here;
+	// HUD_PostRunCmd keeps the chained path consistent with the same rule.
+	// client.dll: minigun (weapon id 21) -> fuser4 = 1.
+	pcd->fuser4 = ( pcd->m_iId == 21 ) ? 1.0f : 0.0f;
+
 	VectorCopy( ppcd->vuser1, pcd->vuser1 );
 	VectorCopy( ppcd->vuser2, pcd->vuser2 );
 	VectorCopy( ppcd->vuser3, pcd->vuser3 );
