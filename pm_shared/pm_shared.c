@@ -3200,6 +3200,16 @@ void PM_PlayerMove( qboolean server )
 	}
 
 	// Handle movement
+	// NOTE (Sven parity, client.dll PlayerMove 0x100a2b93-0x100a2b9c): Sven
+	// forces movetype WALK for everything but NOCLIP. The Sven game DLL
+	// leaves pev->movetype at NONE on players (it forces WALK internally
+	// instead), so trusting the transmitted movetype stalls our prediction
+	// in NONE: no WalkMove ever runs, every snapshot corrects the full
+	// backlog travel and the player hitches. Dead/train states keep their
+	// own gates inside the move code; noclip stays untouched.
+	if( pmove->movetype != MOVETYPE_NOCLIP )
+		pmove->movetype = MOVETYPE_WALK;
+
 	switch( pmove->movetype )
 	{
 	default:
