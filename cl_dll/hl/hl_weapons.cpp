@@ -34,6 +34,7 @@
 
 extern globalvars_t *gpGlobals;
 extern int g_iUser1;
+extern int HUD_ActiveWeaponId();
 
 // Pool of client side entities/entvars_t
 static entvars_t ev[MAX_WEAPONS];
@@ -1035,7 +1036,8 @@ void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s
 {
 	// Native Sven predicts this movement restriction even with cl_lw=0.
 	// client.dll 1002d325: minigun (weapon id 21) -> fuser4 = 1.
-	to->client.fuser4 = from->client.m_iId == 21 ? 1.0f : 0.0f;
+	to->client.fuser4 = ( (gEngfuncs.pfnGetCvarFloat && gEngfuncs.pfnGetCvarFloat( "cl_lw" ) == 0.0f)
+		? HUD_ActiveWeaponId() : from->client.m_iId ) == 21 ? 1.0f : 0.0f;
 
 	g_runfuncs = runfuncs;
 

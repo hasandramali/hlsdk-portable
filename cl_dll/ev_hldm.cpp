@@ -2699,3 +2699,37 @@ void EV_FireM16A2( event_args_t *args )
 //======================
 //	    M16A2 END
 //======================
+
+// Sven client.dll 1001f9c0: iparam1 selects the operation; fparam1 is
+// the sound-table index, fparam2 volume, iparam2 channel. No weapon animation
+// or punch angle is encoded here (those belong to firing events).
+void EV_WeaponCustom( event_args_t *args )
+{
+	static const char *sounds[] = {
+		"weapons/357_cock1.wav", "weapons/rocketfire1.wav", "weapons/glauncher.wav",
+		"weapons/glauncher2.wav", "weapons/357_reload1.wav", "weapons/xbow_fire1.wav",
+		"weapons/xbow_reload1.wav", "common/null.wav", "weapons/electro4.wav",
+		"weapons/electro5.wav", "weapons/electro6.wav", "agrunt/ag_fire1.wav",
+		"agrunt/ag_fire2.wav", "agrunt/ag_fire3.wav", "weapons/dbarrel1.wav",
+		"weapons/sbarrel1.wav", "weapons/reload1.wav", "weapons/reload3.wav",
+		"misc/bbcover.wav", "weapons/scock1.wav", "weapons/sniper_zoom.wav",
+		"weapons/desert_eagle_sight.wav", "weapons/desert_eagle_sight2.wav",
+		"weapons/splauncher_fire.wav", "weapons/splauncher_altfire.wav"
+	};
+	if( args->iparam1 != 1 && args->iparam1 != 2 ) return;
+	// Bound before converting untrusted network floats to an integer.
+	int sound = args->iparam1 == 2 && args->fparam1 >= 0 && args->fparam1 < 25
+		? (int)args->fparam1 : 0;
+	if( args->iparam1 == 2 && sound == 19 && !args->bparam2 )
+	{
+		vec3_t forward, right, up, shellOrigin, shellVelocity;
+		AngleVectors( args->angles, forward, right, up );
+		EV_GetDefaultShellInfo( args, args->origin, args->velocity, shellVelocity,
+			shellOrigin, forward, right, up, 16, -25, 6 );
+		int model = gEngfuncs.pEventAPI->EV_FindModelIndex( "models/shotgunshell.mdl" );
+		EV_EjectBrass( shellOrigin, shellVelocity, args->angles[YAW], model, TE_BOUNCE_SHOTSHELL );
+	}
+	gEngfuncs.pEventAPI->EV_PlaySound( args->entindex, args->origin, args->iparam2,
+		sounds[sound], args->iparam1 == 1 ? 1.0f : args->fparam2,
+		ATTN_NORM, 0, 94 + gEngfuncs.pfnRandomLong( 0, 15 ) );
+}

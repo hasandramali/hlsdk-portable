@@ -39,6 +39,7 @@
 extern "C"
 {
 #include "pm_shared.h"
+#include "pm_defs.h"
 }
 
 #include <string.h>
@@ -150,6 +151,12 @@ char DLLEXPORT HUD_PlayerMoveTexture( char *name )
 
 void DLLEXPORT HUD_PlayerMove( struct playermove_s *ppmove, int server )
 {
+	// With cl_lw=0 Sven sends the active weapon through CurWeapon, while
+	// clientdata.m_iId remains zero. Apply the restriction BEFORE PM_Jump,
+	// including the first command replayed from a newly received snapshot.
+	if( !server && !ppmove->spectator && !ppmove->iuser1 &&
+		gEngfuncs.pfnGetCvarFloat( "cl_lw" ) == 0.0f )
+		ppmove->fuser4 = gHUD.m_Ammo.ActiveWeaponId() == 21 ? 1.0f : 0.0f;
 	PM_Move( ppmove, server );
 }
 

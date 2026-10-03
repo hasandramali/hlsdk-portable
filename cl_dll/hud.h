@@ -112,6 +112,7 @@ struct HUDLIST
 class CHudAmmo : public CHudBase
 {
 public:
+	int ActiveWeaponId() const;
 	int Init( void );
 	int VidInit( void );
 	int Draw( float flTime );

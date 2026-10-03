@@ -69,8 +69,11 @@ Associate script file name with callback functions.  Callback's must be extern "
 That was what we were going to do, but we ran out of time...oh well.
 ======================
 */
+void EV_WeaponCustom( struct event_args_s *args );
+
 void Game_HookEvents( void )
 {
+	gEngfuncs.pfnHookEvent( "events/weapon_custom.sc", EV_WeaponCustom );
 	gEngfuncs.pfnHookEvent( "events/glock1.sc", EV_FireGlock1 );
 	gEngfuncs.pfnHookEvent( "events/glock2.sc", EV_FireGlock2 );
 	gEngfuncs.pfnHookEvent( "events/shotgun1.sc", EV_FireShotGunSingle );

@@ -824,6 +824,16 @@ int CHudAmmo::MsgFunc_ClExtrasInfo( const char *pszName, int iSize, void *pbuf )
 //  counts are updated with AmmoX. Server assures that the Weapon ammo type 
 //  numbers match a real ammo type.
 //
+int HUD_ActiveWeaponId()
+{
+	return gHUD.m_Ammo.ActiveWeaponId();
+}
+
+int CHudAmmo::ActiveWeaponId() const
+{
+	return m_pWeapon ? m_pWeapon->iId : 0;
+}
+
 int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 {
 	wrect_t nullrc = {0,};
