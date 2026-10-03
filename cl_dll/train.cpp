@@ -39,15 +39,20 @@ int CHudTrain::Init( void )
 
 int CHudTrain::VidInit( void )
 {
-	m_hSprite = 0;
+	// Sven client.dll 1005b980 loads the unscaled, multi-frame train HUD.
+	m_hSprite = SPR_Load( "sprites/train.spr" );
+	if( !m_hSprite )
+		m_hSprite = LoadSprite( "sprites/%d_train.spr" );
 
 	return 1;
 }
 
 int CHudTrain::Draw( float fTime )
 {
-	if( !m_hSprite )
-		m_hSprite = LoadSprite( "sprites/%d_train.spr" );
+	// Never pass an invalid handle/frame to SPR_Set: the engine retains
+	// the previous sprite on an invalid handle, drawing unrelated HUD art.
+	if( !m_hSprite || m_iPos <= 0 || m_iPos > SPR_Frames( m_hSprite ) )
+		return 1;
 
 	if( m_iPos )
 	{
@@ -57,7 +62,7 @@ int CHudTrain::Draw( float fTime )
 
 		// This should show up to the right and part way up the armor number
 		y = ScreenHeight - SPR_Height( m_hSprite, 0 ) - gHUD.m_iFontHeight;
-		x = ScreenWidth / 3 + SPR_Width( m_hSprite, 0 ) / 4;
+		x = ScreenWidth / 3 + gHUD.m_iFontHeight + SPR_Width( m_hSprite, 0 ) / 4;
 
 		gHUD.DrawSprite( x, y, m_hSprite, NULL, r, g, b, m_iPos - 1, SPR_ADDITIVE );
 	}

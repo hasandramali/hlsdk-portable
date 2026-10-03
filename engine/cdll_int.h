@@ -65,10 +65,13 @@ typedef struct client_data_s
 
 	// fields that can be changed by the cldll
 	vec3_t		viewangles;
-	int		pad[2];
 	int		iWeaponBits;
 	float		fov;		// field of view
 } client_data_t;
+
+// Xash HUD_UpdateClientData ABI: weapons at byte 24, FOV at byte 28.
+// Sven's native engine layout must not be used for this local DLL interface.
+typedef char client_data_xash_abi_size_check[(sizeof(client_data_t) == 32) ? 1 : -1];
 
 typedef struct client_sprite_s
 {
