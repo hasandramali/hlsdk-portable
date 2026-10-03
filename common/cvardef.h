@@ -30,6 +30,7 @@
 #define FCVAR_FILTERSTUFFTEXT	(1<<11)	// Not queryable/settable if unprivileged and filterstufftext is enabled
 #define FCVAR_FILTERCHARS	(1<<12) // This cvar's string will be filtered for 'bad' characters (e.g. ';', '\n')
 #define FCVAR_NOBADPATHS	(1<<13) // This cvar's string cannot contain file paths that are above the current directory
+#define FCVAR_CHEAT	(1<<15)	// cannot be changed if sv_cheats is 0 (mirrors the engine flag bit so the engine enforces it)
 
 typedef struct cvar_s
 {
