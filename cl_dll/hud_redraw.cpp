@@ -191,6 +191,21 @@ int CHud::Redraw( float flTime, int intermission )
 
 	m_iIntermission = intermission;
 
+	// Trace visibility transitions, not every frame. A HideHUD message alone
+	// cannot explain all-HUD loss when its ALL bit is clear.
+	if( CVAR_GET_FLOAT( "cl_goldsrc_debug" ) >= 1 )
+	{
+		static int lastHide = -1, lastIntermission = -1, lastDraw = -1;
+		int draw = m_pCvarDraw->value != 0;
+		if( lastHide != m_iHideHUDDisplay || lastIntermission != intermission || lastDraw != draw )
+		{
+			gEngfuncs.Con_Printf( "HUD-VIS: hide=0x%x intermission=%d draw=%d observer=%d time=%.3f\n",
+				m_iHideHUDDisplay, intermission, draw, g_iUser1, flTime );
+			lastHide = m_iHideHUDDisplay; lastIntermission = intermission; lastDraw = draw;
+		}
+	}
+
+
 	// if no redrawing is necessary
 	// return 0;
 

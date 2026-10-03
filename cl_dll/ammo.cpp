@@ -854,7 +854,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		iAmmo = 0;
 
 	// detect if we're also on target (vanilla state 2, Sven bit 1)
-	if( iState > 1 )
+	if( iState & 2 )
 	{
 		fOnTarget = TRUE;
 	}
@@ -925,7 +925,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	}
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
-	if( iState == 0 )
+	if( !( iState & 1 ) )
 		return 1;
 
 	m_pWeapon = pWeapon;

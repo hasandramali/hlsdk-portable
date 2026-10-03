@@ -87,11 +87,11 @@ Is the entity == the local player
 */
 qboolean EV_IsLocal( int idx )
 {
-	// check if we are in some way in first person spec mode
-	if( IS_FIRSTPERSON_SPEC )
-		return ( g_iUser2 == idx );
-	else
-		return gEngfuncs.pEventAPI->EV_IsLocal( idx - 1 ) ? true : false;
+	// Sven client.dll 10017340 checks the engine's local player first.
+	// Observer/PIP state must never suppress our own weapon animations.
+	if( gEngfuncs.pEventAPI->EV_IsLocal( idx - 1 ))
+		return true;
+	return IS_FIRSTPERSON_SPEC && g_iUser2 == idx;
 }
 
 /*
