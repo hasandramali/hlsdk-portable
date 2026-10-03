@@ -500,7 +500,7 @@ void CHud::Init( void )
 	m_pCvarAlphaDefault = CVAR_CREATE("hud_alpha_default", "160", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
 	m_pCvarAlphaMax = CVAR_CREATE("hud_alpha_max", "255", FCVAR_CLIENTDLL | FCVAR_ARCHIVE);
 	m_pCvarStealMouse = CVAR_CREATE("hud_capturemouse", "1", FCVAR_ARCHIVE);
-	cl_wpn_punchangles = CVAR_CREATE( "cl_wpn_punchangles", "1", FCVAR_CHEAT ); // weapon fire view-punch (m16/uzi/sniper), 0 disables for testing
+	cl_wpn_punchangles = CVAR_CREATE( "cl_wpn_punchangles", "1", FCVAR_CHEAT );
 	default_fov = CVAR_CREATE("default_fov", "90", FCVAR_ARCHIVE);
 	m_pAllowHD = CVAR_CREATE ( "hud_allow_hd", "1", FCVAR_ARCHIVE );
 	cl_lw = gEngfuncs.pfnGetCvarPointer( "cl_lw" );
