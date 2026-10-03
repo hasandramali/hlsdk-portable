@@ -36,6 +36,7 @@ const char		*stub_NameForFunction( void *function );
 void			stub_SetModel( struct edict_s *e, const char *m );
 
 extern cvar_t *cl_lw;
+extern cvar_t *cl_wpn_punchangles;
 
 extern int g_runfuncs;
 extern vec3_t v_angles;

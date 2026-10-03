@@ -46,6 +46,7 @@ void V_PunchAxis( int axis, float punch );
 void VectorAngles( const float *forward, float *angles );
 
 extern cvar_t *cl_lw;
+extern cvar_t *cl_wpn_punchangles;
 
 extern "C"
 {
@@ -2414,7 +2415,9 @@ void EV_FireSniper( event_args_t *args )
 			gEngfuncs.pEventAPI->EV_WeaponAnimation( SNIPER_FIRE, 0 );
 		}
 
-		// Sven sends the recoil in clientdata; the event only starts the animation.
+		// Sven client punch for the sniper kick (cl_wpn_punchangles gates it for testing).
+		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
+			V_PunchAxis( 0, -5.0 );
 	}
 
 	// Play fire sound (stock: sniper_fire.wav, pitch 0x62 + RandomLong(0,3)).
@@ -2541,7 +2544,9 @@ void EV_FireUzi( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( UZI_SHOOT, 0 );
 
-		// Sven supplies recoil in clientdata; do not add a second random punch.
+		// Sven client punch for the uzi kick (cl_wpn_punchangles gates it for testing).
+		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
+			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
@@ -2607,7 +2612,9 @@ void EV_FireUziakimbo( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( args->iparam1, 2 );
 
-		// Sven supplies recoil in clientdata; do not add a second random punch.
+		// Sven client punch for the akimbo kick (cl_wpn_punchangles gates it for testing).
+		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
+			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
@@ -2680,7 +2687,9 @@ void EV_FireM16A2( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( M16A2_FIRE1 + gEngfuncs.pfnRandomLong( 0, 1 ), 0 );
 
-		// Sven supplies recoil in clientdata; do not add a second random punch.
+		// Sven client punch for the m16 kick (cl_wpn_punchangles gates it for testing).
+		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
+			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
