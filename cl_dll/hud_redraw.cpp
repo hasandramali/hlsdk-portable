@@ -196,12 +196,19 @@ int CHud::Redraw( float flTime, int intermission )
 	if( CVAR_GET_FLOAT( "cl_goldsrc_debug" ) >= 1 )
 	{
 		static int lastHide = -1, lastIntermission = -1, lastDraw = -1;
+		static unsigned int lastWeapons = 0, lastActive = 0;
+		unsigned int active = 0, element = 0;
+		for( HUDLIST *item = m_pHudList; item && element < 32; item = item->pNext, ++element )
+			if( item->p->m_iFlags & HUD_ACTIVE ) active |= 1u << element;
+		unsigned int weapons = (unsigned int)m_iWeaponBits;
 		int draw = m_pCvarDraw->value != 0;
-		if( lastHide != m_iHideHUDDisplay || lastIntermission != intermission || lastDraw != draw )
+		if( lastHide != m_iHideHUDDisplay || lastIntermission != intermission || lastDraw != draw
+			|| lastWeapons != weapons || lastActive != active )
 		{
-			gEngfuncs.Con_Printf( "HUD-VIS: hide=0x%x intermission=%d draw=%d observer=%d time=%.3f\n",
-				m_iHideHUDDisplay, intermission, draw, g_iUser1, flTime );
+			gEngfuncs.Con_Printf( "HUD-VIS: hide=0x%x intermission=%d draw=%d observer=%d weapons=0x%08x suit=%u active=0x%08x time=%.3f\n",
+				m_iHideHUDDisplay, intermission, draw, g_iUser1, weapons, weapons >> 31, active, flTime );
 			lastHide = m_iHideHUDDisplay; lastIntermission = intermission; lastDraw = draw;
+			lastWeapons = weapons; lastActive = active;
 		}
 	}
 
