@@ -95,7 +95,7 @@ static int PM_SvenTestPlayerPosition( float *pos, pmtrace_t *tr )
 #define VEC_DUCK_HULL_MAX	18
 #define VEC_DUCK_VIEW		12
 #define PM_DEAD_VIEWHEIGHT	-8
-#define MAX_CLIMB_SPEED		200
+#define MAX_CLIMB_SPEED		150
 #define STUCK_MOVEUP		1
 #define STUCK_MOVEDOWN		-1
 #define VEC_HULL_MIN		-36
@@ -2282,14 +2282,12 @@ void PM_LadderMove( physent_t *pLadder )
 		vec3_t vpn, v_right;
 		float flSpeed = MAX_CLIMB_SPEED;
 
-		// they shouldn't be able to move faster than their maxspeed
-		if( flSpeed > pmove->maxspeed )
-			flSpeed = pmove->maxspeed;
+		// Sven client.dll 0x100a4c00: min(clientmaxspeed, 150).
+		if( flSpeed > pmove->clientmaxspeed )
+			flSpeed = pmove->clientmaxspeed;
 
 		AngleVectors( pmove->angles, vpn, v_right, NULL );
 
-		if( pmove->flags & FL_DUCKING )
-			flSpeed *= PLAYER_DUCKING_MULTIPLIER;
 		if( pmove->cmd.buttons & IN_BACK )
 			forward -= flSpeed;
 		if( pmove->cmd.buttons & IN_FORWARD )
@@ -2349,7 +2347,18 @@ void PM_LadderMove( physent_t *pLadder )
 			}
 			else
 			{
-				VectorClear( pmove->velocity );
+				// Sven 0x100a4ce0: release decelerates along the ladder.
+				float speed = Length( pmove->velocity );
+				if( speed < 1.0f || pmove->flFallVelocity >= 350.0f )
+				{
+					VectorClear( pmove->velocity );
+				}
+				else
+				{
+					float drop = max( speed, pmove->movevars->stopspeed )
+						* pmove->movevars->friction * 3.0f * pmove->frametime;
+					VectorScale( pmove->velocity, max( 0.0f, speed - drop ) / speed, pmove->velocity );
+				}
 			}
 		}
 	}
