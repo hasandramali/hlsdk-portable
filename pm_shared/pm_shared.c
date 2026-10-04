@@ -46,6 +46,49 @@ static int pm_shared_initialized = 0;
 
 playermove_t *pmove = NULL;
 
+// Sven client.dll 0x100a8d70. Ignore non-blocking NPCs and actors
+// already overlapping us; otherwise CheckStuck can freeze prediction while
+// the server continues moving the player. BSP pushers must remain solid.
+static int PM_SvenIgnore( physent_t *pe )
+{
+	int i;
+	if( pmove->iuser1 || ( pe->player && pe->iuser1 ) ) return 1;
+	if( pe->solid == SOLID_BSP ) return 0;
+	if( pe->movetype != MOVETYPE_WALK && pe->movetype != MOVETYPE_STEP ) return 0;
+	if( pe->player == 1 && pe->iuser4 == 1 && pmove->iuser4 == 1 ) return 1;
+	if( !pe->player && pe->movetype == MOVETYPE_STEP && pe->iuser2 > 0 ) return 1;
+	for( i = 0; i < 3; ++i )
+	{
+		if( pe->origin[i] + pe->mins[i] > pmove->origin[i] + pmove->player_maxs[pmove->usehull][i]
+			|| pmove->origin[i] + pmove->player_mins[pmove->usehull][i] > pe->origin[i] + pe->maxs[i] )
+			return 0;
+	}
+	return 1;
+}
+
+static pmtrace_t PM_SvenPlayerTrace( float *start, float *end, int flags, int ignore )
+{
+	pmtrace_t tr;
+#if __MINGW32__
+	if( pmove->PM_PlayerTraceEx_real && ignore == -1 )
+#else
+	if( pmove->PM_PlayerTraceEx && ignore == -1 )
+#endif
+	{
+		tr = pmove->PM_PlayerTraceEx( start, end, flags, PM_SvenIgnore );
+		return tr;
+	}
+	tr = pmove->PM_PlayerTrace( start, end, flags, ignore );
+	return tr;
+}
+
+static int PM_SvenTestPlayerPosition( float *pos, pmtrace_t *tr )
+{
+	if( pmove->PM_TestPlayerPositionEx )
+		return pmove->PM_TestPlayerPositionEx( pos, tr, PM_SvenIgnore );
+	return pmove->PM_TestPlayerPosition( pos, tr );
+}
+
 // Ducking time
 #define TIME_TO_DUCK		0.4f
 #define VEC_DUCK_HULL_MIN	-18
@@ -936,7 +979,7 @@ int PM_FlyMove( void )
 			end[i] = pmove->origin[i] + time_left * pmove->velocity[i];
 
 		// See if we can make it from origin to end point.
-		trace = pmove->PM_PlayerTrace( pmove->origin, end, PM_NORMAL, -1 );
+		trace = PM_SvenPlayerTrace( pmove->origin, end, PM_NORMAL, -1 );
 
 		// NOTE (Sven parity, client.dll FlyMove 0x100a324e): sub-1e-4
 		// fractions are zeroed before anything else. Prevents
@@ -1241,7 +1284,7 @@ void PM_WalkMove( void )
 
 	// first try moving directly to the next spot
 	//VectorCopy( dest, start );
-	trace = pmove->PM_PlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
 	// If we made it all the way, then copy trace end
 	//  as new player position.
 	if( trace.fraction == 1 )
@@ -1279,7 +1322,7 @@ void PM_WalkMove( void )
 	VectorCopy( pmove->origin, dest );
 	dest[2] += pmove->movevars->stepsize;
 
-	trace = pmove->PM_PlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
 	// If we started okay and made it part of the way at least,
 	//  copy the results to the movement start position and then
 	//  run another move try.
@@ -1297,7 +1340,7 @@ void PM_WalkMove( void )
 	VectorCopy( pmove->origin, dest );
 	dest[2] -= pmove->movevars->stepsize;
 
-	trace = pmove->PM_PlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( pmove->origin, dest, PM_NORMAL, -1 );
 
 	// NOTE (Sven parity, client.dll PM step 0x100a44be-0x100a452d): Sven
 	// has NO steep-plane check on the down-trace. It goes straight from
@@ -1374,7 +1417,7 @@ void PM_Friction( void )
 		start[2] = pmove->origin[2] + pmove->player_mins[pmove->usehull][2];
 		stop[2] = start[2] - 34;
 
-		trace = pmove->PM_PlayerTrace( start, stop, PM_NORMAL, -1 );
+		trace = PM_SvenPlayerTrace( start, stop, PM_NORMAL, -1 );
 
 		if( trace.fraction == 1.0f )
 			friction = pmove->movevars->friction*pmove->movevars->edgefriction;
@@ -1533,7 +1576,7 @@ void PM_WaterMove( void )
 	VectorMA( pmove->origin, pmove->frametime, pmove->velocity, dest );
 	VectorCopy( dest, start );
 	start[2] += pmove->movevars->stepsize + 1;
-	trace = pmove->PM_PlayerTrace( start, dest, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( start, dest, PM_NORMAL, -1 );
 	if( !trace.startsolid && !trace.allsolid )	// FIXME: check steep slope?
 	{	// walked up the step, so just keep result and exit
 		VectorCopy( trace.endpos, pmove->origin );
@@ -1725,7 +1768,7 @@ void PM_CatagorizePosition( void )
 	else
 	{
 		// Try and move down.
-		tr = pmove->PM_PlayerTrace( pmove->origin, point, PM_NORMAL, -1 );
+		tr = PM_SvenPlayerTrace( pmove->origin, point, PM_NORMAL, -1 );
 		// If we hit a steep plane, we are not on ground
 		if( tr.plane.normal[2] < 0.7f )
 			pmove->onground = -1;	// too steep
@@ -1799,7 +1842,7 @@ int PM_CheckStuck( void )
 	static float rgStuckCheckTime[MAX_CLIENTS][2]; // Last time we did a full
 
 	// If position is okay, exit
-	hitent = pmove->PM_TestPlayerPosition( pmove->origin, &traceresult );
+	hitent = PM_SvenTestPlayerPosition( pmove->origin, &traceresult );
 	if( hitent == -1 )
 	{
 		PM_ResetStuckOffsets( pmove->player_index, pmove->server );
@@ -1823,7 +1866,7 @@ int PM_CheckStuck( void )
 				i = PM_GetRandomStuckOffsets( pmove->player_index, pmove->server, offset );
 
 				VectorAdd( base, offset, test );
-				if( pmove->PM_TestPlayerPosition( test, &traceresult ) == -1 )
+				if( PM_SvenTestPlayerPosition( test, &traceresult ) == -1 )
 				{
 					PM_ResetStuckOffsets( pmove->player_index, pmove->server );
 
@@ -1854,7 +1897,7 @@ int PM_CheckStuck( void )
 	i = PM_GetRandomStuckOffsets( pmove->player_index, pmove->server, offset );
 
 	VectorAdd( base, offset, test );
-	if( ( hitent = pmove->PM_TestPlayerPosition( test, NULL ) ) == -1 )
+	if( ( hitent = PM_SvenTestPlayerPosition( test, NULL ) ) == -1 )
 	{
 		//Con_DPrintf( "Nudged\n" );
 
@@ -1885,7 +1928,7 @@ int PM_CheckStuck( void )
 					test[1] += y;
 					test[2] += z;
 
-					if( pmove->PM_TestPlayerPosition( test, NULL ) == -1 )
+					if( PM_SvenTestPlayerPosition( test, NULL ) == -1 )
 					{
 						VectorCopy( test, pmove->origin );
 						return 0;
@@ -2050,7 +2093,7 @@ void PM_FixPlayerCrouchStuck( int direction )
 	int i;
 	vec3_t test;
 
-	hitent = pmove->PM_TestPlayerPosition( pmove->origin, NULL );
+	hitent = PM_SvenTestPlayerPosition( pmove->origin, NULL );
 	if( hitent == -1 )
 		return;
 
@@ -2058,7 +2101,7 @@ void PM_FixPlayerCrouchStuck( int direction )
 	for( i = 0; i < 36; i++ )
 	{
 		pmove->origin[2] += direction;
-		hitent = pmove->PM_TestPlayerPosition( pmove->origin, NULL );
+		hitent = PM_SvenTestPlayerPosition( pmove->origin, NULL );
 		if( hitent == -1 )
 			return;
 	}
@@ -2082,14 +2125,14 @@ void PM_UnDuck( void )
 		}
 	}
 
-	trace = pmove->PM_PlayerTrace( newOrigin, newOrigin, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( newOrigin, newOrigin, PM_NORMAL, -1 );
 
 	if( !trace.startsolid )
 	{
 		pmove->usehull = 0;
 
 		// Oh, no, changing hulls stuck us into something, try unsticking downward first.
-		trace = pmove->PM_PlayerTrace( newOrigin, newOrigin, PM_NORMAL, -1 );
+		trace = PM_SvenPlayerTrace( newOrigin, newOrigin, PM_NORMAL, -1 );
 		if( trace.startsolid )
 		{
 			// See if we are stuck?  If so, stay ducked with the duck hull until we have a clear spot
@@ -2401,7 +2444,7 @@ pmtrace_t PM_PushEntity( vec3_t push )
 
 	VectorAdd( pmove->origin, push, end );
 
-	trace = pmove->PM_PlayerTrace( pmove->origin, end, PM_NORMAL, -1 );
+	trace = PM_SvenPlayerTrace( pmove->origin, end, PM_NORMAL, -1 );
 
 	VectorCopy( trace.endpos, pmove->origin );
 
@@ -2786,14 +2829,14 @@ void PM_CheckWaterJump( void )
 	// Trace, this trace should use the point sized collision hull
 	savehull = pmove->usehull;
 	pmove->usehull = 2;
-	tr = pmove->PM_PlayerTrace( vecStart, vecEnd, PM_NORMAL, -1 );
+	tr = PM_SvenPlayerTrace( vecStart, vecEnd, PM_NORMAL, -1 );
 	if( tr.fraction < 1.0f && fabs( tr.plane.normal[2] ) < 0.1f )  // Facing a near vertical wall?
 	{
 		vecStart[2] += pmove->player_maxs[savehull][2] - WJ_HEIGHT;
 		VectorMA( vecStart, 24, flatforward, vecEnd );
 		VectorMA( vec3_origin, -50, tr.plane.normal, pmove->movedir );
 
-		tr = pmove->PM_PlayerTrace( vecStart, vecEnd, PM_NORMAL, -1 );
+		tr = PM_SvenPlayerTrace( vecStart, vecEnd, PM_NORMAL, -1 );
 		if( tr.fraction == 1.0f )
 		{
 			pmove->waterjumptime = 2000;
@@ -3199,15 +3242,10 @@ void PM_PlayerMove( qboolean server )
 		}
 	}
 
-	// Handle movement
-	// NOTE (Sven parity, client.dll PlayerMove 0x100a2b93-0x100a2b9c): Sven
-	// forces movetype WALK for everything but NOCLIP. The Sven game DLL
-	// leaves pev->movetype at NONE on players (it forces WALK internally
-	// instead), so trusting the transmitted movetype stalls our prediction
-	// in NONE: no WalkMove ever runs, every snapshot corrects the full
-	// backlog travel and the player hitches. Dead/train states keep their
-	// own gates inside the move code; noclip stays untouched.
-	if( pmove->movetype != MOVETYPE_NOCLIP )
+	// Sven client.dll 0x100a2b66: preserve FLY selected by LadderMove.
+	// With no usable ladder, normalize server-side NONE to WALK.
+	if( ( !pLadder || pmove->dead || ( pmove->flags & FL_ONTRAIN ) )
+		&& pmove->movetype != MOVETYPE_NOCLIP )
 		pmove->movetype = MOVETYPE_WALK;
 
 	switch( pmove->movetype )
