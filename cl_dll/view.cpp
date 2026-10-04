@@ -680,7 +680,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 	// Smooth out whole view in multiplayer when on trains, lifts
 	if( cl_vsmoothing && cl_vsmoothing->value &&
-		( pparams->smoothing && ( pparams->maxclients > 1 ) ) )
+		( pparams->smoothing && pparams->smoothing != VIEW_SMOOTH_PLATFORM && ( pparams->maxclients > 1 ) ) )
 	{
 		int foundidx;
 		float t;

@@ -16,6 +16,9 @@
 #if !defined(REF_PARAMS_H)
 #define REF_PARAMS_H
 
+// Engine already aligned simorg to the rendered supporting platform.
+#define VIEW_SMOOTH_PLATFORM 2
+
 typedef struct ref_params_s
 {
 	// output
