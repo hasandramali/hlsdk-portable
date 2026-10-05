@@ -140,6 +140,20 @@ int DispatchSpawn( edict_t *pent )
 {
 	CBaseEntity *pEntity = (CBaseEntity *)GET_PRIVATE( pent );
 
+	// _server_start is the boot background map: skip every entity except
+	// spawn points (plus worldsky handling) so weak devices start fast.
+	// No suit/weapons either (game_player_equip never spawns to give them).
+	if( pEntity && FStrEq( STRING( gpGlobals->mapname ), "_server_start" ))
+	{
+		const char *cls = STRING( pEntity->pev->classname );
+
+		if( strcmp( cls, "worldspawn" ) != 0
+			&& strcmp( cls, "info_player_start" ) != 0
+			&& strcmp( cls, "info_player_deathmatch" ) != 0
+			&& strstr( cls, "sky" ) == NULL )
+			return -1; // engine frees the edict; Spawn()/precache never runs
+	}
+
 	if( pEntity )
 	{
 		// Initialize these or entities who don't link to the world won't have anything in here
