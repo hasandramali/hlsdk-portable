@@ -550,6 +550,36 @@ private:
 	icon_sprite_t m_IconList[MAX_ICONSPRITES];
 };
 
+// Traceable crosshair: instead of pinning the weapon sprite at the screen
+// center, draw it where the player's eye ray actually impacts (projected
+// to screen). Matters most in third person, where center-screen is not
+// where shots land.
+class CHudEsfCrosshair : public CHudBase
+{
+public:
+	int Init( void );
+	int VidInit( void );
+	int Draw( float flTime );
+};
+
+// Center touch-orbit dot: finger-sized "." box at the screen center,
+// visible only in third person. Dragging it orbits cam_idealyaw/pitch;
+// the values snap back 7s after release (or immediately on sc_chasecam).
+class CHudTouchOrbit : public CHudBase
+{
+public:
+	int Init( void );
+	int VidInit( void );
+	int Draw( float flTime );
+	int Event( int type, int finger, float x, float y, float dx, float dy );
+	void Cancel( void );
+private:
+	int m_finger;
+	float m_baseYaw, m_basePitch;
+	float m_restoreAt;
+	qboolean m_session;
+};
+
 //
 //-----------------------------------------------------
 //
@@ -650,6 +680,8 @@ public:
 	CHudAmmoSecondary	m_AmmoSecondary;
 	CHudTextMessage m_TextMessage;
 	CHudStatusIcons m_StatusIcons;
+	CHudEsfCrosshair m_EsfCrosshair;
+	CHudTouchOrbit m_TouchOrbit;
 #if !USE_VGUI || USE_NOVGUI_SCOREBOARD
 	CHudScoreboard	m_Scoreboard;
 #endif

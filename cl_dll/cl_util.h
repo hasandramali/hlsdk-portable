@@ -82,7 +82,10 @@ inline struct cvar_s *CVAR_CREATE( const char *cv, const char *val, const int fl
 #define GetScreenInfo ( *gEngfuncs.pfnGetScreenInfo )
 #define ServerCmd ( *gEngfuncs.pfnServerCmd )
 #define ClientCmd ( *gEngfuncs.pfnClientCmd )
-#define SetCrosshair ( *gEngfuncs.pfnSetCrosshair )
+// Traceable crosshair (sven_ui.cpp): stores the weapon sprite and draws it
+// at the eye-ray impact point instead of the screen center. k/l/m are
+// accepted only for signature compatibility.
+extern void SetCrosshair( HSPRITE sprite, wrect_t size, int k, int l, int m );
 #define AngleVectors ( *gEngfuncs.pfnAngleVectors )
 extern cvar_t *hud_textmode;
 extern float g_hud_text_color[3];

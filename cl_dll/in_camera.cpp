@@ -14,6 +14,8 @@
 #include "const.h"
 #include "camera.h"
 #include "in_defs.h"
+#include "pm_defs.h"
+#include "event_api.h"
 
 #if XASH_WIN32
 #define WIN32_LEAN_AND_MEAN		// Exclude rarely-used stuff from Windows headers
@@ -47,7 +49,11 @@ extern cl_enginefunc_t gEngfuncs;
 #define CAM_DIST_DELTA 1.0f
 #define CAM_ANGLE_DELTA 2.5f
 #define CAM_ANGLE_SPEED 2.5f
-#define CAM_MIN_DIST 30.0f
+#define CAM_DIST_OFFSET 88.0f	// extra distance folded into the ideal distance
+#define CAM_MIN_DIST (40.0f + CAM_DIST_OFFSET)
+// Any trace-shortened distance above this stays in third person, just
+// pulled in closer.
+#define CAM_COLLIDE_MIN_DIST 20.0f
 #define CAM_ANGLE_MOVE 0.5f
 #define MAX_ANGLE_DIFF 10.0f
 #define PITCH_MAX 90.0f
@@ -71,6 +77,12 @@ cvar_t	*cam_idealpitch;
 cvar_t	*cam_idealdist;
 cvar_t	*cam_contain;
 
+// Camera point offset along the camera's own right/up/forward axes
+// (x = right/left, y = extra forward/back, z = up/down).
+cvar_t	*cam_xoffset;
+cvar_t	*cam_yoffset;
+cvar_t	*cam_zoffset;
+
 cvar_t	*c_maxpitch;
 cvar_t	*c_minpitch;
 cvar_t	*c_maxyaw;
@@ -80,6 +92,16 @@ cvar_t	*c_mindistance;
 
 // pitch, yaw, dist
 vec3_t cam_ofs;
+
+// Camera point offset (right, extra-forward, up), read fresh from the
+// cam_xoffset/cam_yoffset/cam_zoffset cvars every frame.
+vec3_t cam_extra_ofs;
+
+// Requested view mode. Unlike cam_thirdperson, which the collision code
+// may clear temporarily, this remembers intent across wall grazes.
+int cam_idealview = VIEW_FIRSTPERSON;
+
+static float switchtime = 0.0f;
 
 // In third person
 int cam_thirdperson;
@@ -98,6 +120,7 @@ static kbutton_t cam_in, cam_out, cam_move;
 
 void CAM_ToThirdPerson(void);
 void CAM_ToFirstPerson(void);
+void CAM_ToggleChasecam(void);
 void CAM_StartDistance(void);
 void CAM_EndDistance(void);
 
@@ -169,6 +192,8 @@ void DLLEXPORT CAM_Think( void )
 #endif
 	vec3_t viewangles;
 
+	// Third person is allowed in multiplayer (Sven needs it); the old
+	// GetMaxClients() > 1 force-off is gone.
 	switch( (int)cam_command->value )
 	{
 		case CAM_COMMAND_TOTHIRDPERSON:
@@ -183,7 +208,58 @@ void DLLEXPORT CAM_Think( void )
 	}
 
 	if( !cam_thirdperson )
+	{
+		// Force-switched to first person because something solid was
+		// blocking the camera: flip back once there is room again.
+		if( cam_idealview == VIEW_THIRDPERSON && gEngfuncs.GetClientTime() - switchtime > 0.5f )
+		{
+			cl_entity_t *localPlayer = gEngfuncs.GetLocalPlayer();
+			if( localPlayer && gEngfuncs.pEventAPI )
+			{
+				pmtrace_t tr;
+				vec3_t camForwardTrace, camRightTrace, camUpTrace;
+				vec3_t checkAngles;
+
+				// angle check to avoid being in first person at a short
+				// distance while going far from the trace
+				vec3_t checkViewangles;
+				gEngfuncs.GetViewAngles( (float *)checkViewangles );
+				checkAngles[PITCH] = cam_idealpitch->value + checkViewangles[PITCH];
+				checkAngles[YAW] = cam_idealyaw->value + checkViewangles[YAW];
+				AngleVectors( checkAngles, camForwardTrace, camRightTrace, camUpTrace );
+
+				vec3_t view_ofs;
+				gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
+
+				vec3_t player_origin;
+				VectorAdd( localPlayer->origin, view_ofs, player_origin );
+
+				// trace the full ideal distance, then derive how much
+				// clear space there actually is
+				float idealDist = cam_idealdist->value + CAM_DIST_OFFSET;
+				vec3_t camera_origin;
+				VectorMA( player_origin, -idealDist, camForwardTrace, camera_origin );
+
+				gEngfuncs.pEventAPI->EV_SetSolidPlayers( localPlayer->index - 1 );
+				// a wide hull's bottom edge can catch small ledges/steps in
+				// the floor that the camera should pass clean over
+				gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+				gEngfuncs.pEventAPI->EV_PlayerTrace( player_origin, camera_origin, PM_NORMAL, -1, &tr );
+
+				if( !tr.startsolid && !tr.allsolid )
+				{
+					float clearDist = idealDist;
+					if( tr.fraction < 0.999f )
+						clearDist = tr.fraction * idealDist;
+
+					// only flip back once there's room for a usable camera
+					if( clearDist >= CAM_COLLIDE_MIN_DIST )
+						CAM_ToThirdPerson();
+				}
+			}
+		}
 		return;
+	}
 #if LATER
 	if( cam_contain->value )
 	{
@@ -290,16 +366,20 @@ void DLLEXPORT CAM_Think( void )
 	if( CL_KeyState( &cam_in ) )
 	{
 		dist -= CAM_DIST_DELTA;
-		if( dist < CAM_MIN_DIST )
+		// Zoom-in floor holds the pre-offset value; going back into first
+		// person resets the angle.
+		if( dist < -80 )
 		{
-			// If we go back into first person, reset the angle
 			camAngles[PITCH] = 0;
 			camAngles[YAW] = 0;
-			dist = CAM_MIN_DIST;
+			dist = -80;
 		}
 	}
-	else if( CL_KeyState( &cam_out ) )
+	else if( CL_KeyState( &cam_out ) ) {
 		dist += CAM_DIST_DELTA;
+		if( dist > 256.0f )
+			dist = 256.0f;
+	}
 
 	if( cam_distancemove )
 	{
@@ -369,7 +449,7 @@ void DLLEXPORT CAM_Think( void )
 	{
 		camAngles[YAW] = cam_idealyaw->value + viewangles[YAW];
 		camAngles[PITCH] = cam_idealpitch->value + viewangles[PITCH];
-		camAngles[2] = cam_idealdist->value;
+		camAngles[2] = cam_idealdist->value + CAM_DIST_OFFSET;
 	}
 	else
 	{
@@ -379,10 +459,12 @@ void DLLEXPORT CAM_Think( void )
 		if( camAngles[PITCH] - viewangles[PITCH] != cam_idealpitch->value )
 			camAngles[PITCH] = MoveToward( camAngles[PITCH], cam_idealpitch->value + viewangles[PITCH], CAM_ANGLE_SPEED );
 
-		if( fabs( camAngles[2] - cam_idealdist->value ) < 2.0f )
-			camAngles[2] = cam_idealdist->value;
+		// Distance tracks the offset ideal (cam_idealdist + extra).
+		float idealDist = cam_idealdist->value + CAM_DIST_OFFSET;
+		if( fabs( camAngles[2] - idealDist ) < 2.0f )
+			camAngles[2] = idealDist;
 		else
-			camAngles[2] += ( cam_idealdist->value - camAngles[2] ) * 0.25f;
+			camAngles[2] += ( idealDist - camAngles[2] ) * 0.25f;
 	}
 #if LATER
 	if( cam_contain->value )
@@ -404,9 +486,85 @@ void DLLEXPORT CAM_Think( void )
 			return;
 	}
 #endif
+	// Trace the camera so walls pull it in instead of clipping through.
+	// A wide hull's bottom edge can catch small ledges/steps that the
+	// camera should pass clean over, so use the point hull (2).
+	{
+		pmtrace_t tr;
+		vec3_t camForwardTrace, camRightTrace, camUpTrace;
+		AngleVectors( camAngles, camForwardTrace, camRightTrace, camUpTrace );
+
+		cl_entity_t *localPlayer = gEngfuncs.GetLocalPlayer();
+		if( localPlayer && gEngfuncs.pEventAPI )
+		{
+			vec3_t view_ofs;
+			gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
+
+			vec3_t player_origin;
+			VectorAdd( localPlayer->origin, view_ofs, player_origin );
+
+			float traceDist = camAngles[2];
+			vec3_t camera_origin;
+			VectorMA( player_origin, -traceDist, camForwardTrace, camera_origin );
+
+			gEngfuncs.pEventAPI->EV_SetSolidPlayers( localPlayer->index - 1 );
+			gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+			gEngfuncs.pEventAPI->EV_PlayerTrace( player_origin, camera_origin, PM_NORMAL, -1, &tr );
+
+			if( !tr.startsolid && !tr.allsolid )
+			{
+				// only shorten on a real hit; applying frac*dist
+				// unconditionally lets float rounding nibble the distance
+				// every frame even with clear line of sight
+				qboolean bShortenedByTrace = false;
+				if( tr.fraction < 0.999f )
+				{
+					bShortenedByTrace = true;
+					traceDist = tr.fraction * traceDist;
+					VectorMA( player_origin, -traceDist, camForwardTrace, camera_origin );
+					gEngfuncs.pEventAPI->EV_PlayerTrace( player_origin, camera_origin, PM_NORMAL, -1, &tr );
+				}
+
+				if( bShortenedByTrace && traceDist < CAM_COLLIDE_MIN_DIST )
+				{
+					// Too close even shortened: drop to first person.
+					switchtime = gEngfuncs.GetClientTime();
+					if( cam_thirdperson )
+						cam_thirdperson = 0;
+				}
+				else if( tr.fraction < 1.0f )
+				{
+					// Blocked at the shortened distance: first person.
+					switchtime = gEngfuncs.GetClientTime();
+					if( cam_thirdperson )
+						cam_thirdperson = 0;
+				}
+				else
+				{
+					camAngles[2] = traceDist;
+					if( !cam_thirdperson && cam_idealview == VIEW_THIRDPERSON )
+					{
+						// Clear now: allow returning, but only after the
+						// cooldown so wall grazes don't pogo 1st/3rd person.
+						if( gEngfuncs.GetClientTime() - switchtime > 0.5f )
+							CAM_ToThirdPerson();
+					}
+				}
+			}
+		}
+	}
+	// synchronize distance by trace
+	dist = camAngles[2];
+
 	cam_ofs[0] = camAngles[0];
 	cam_ofs[1] = camAngles[1];
 	cam_ofs[2] = dist;
+
+	// Camera point offset, read fresh every frame so the cvars stay live;
+	// consumed in view.cpp along the camera's own axes.
+	cam_extra_ofs[0] = cam_xoffset->value;
+	cam_extra_ofs[1] = cam_yoffset->value;
+	cam_extra_ofs[2] = cam_zoffset->value;
 }
 
 extern void KeyDown( kbutton_t *b );	// HACK
@@ -476,6 +634,9 @@ void CAM_ToThirdPerson( void )
 {
 	vec3_t viewangles;
 
+	// Third person is allowed in multiplayer (Sven needs it).
+	cam_idealview = VIEW_THIRDPERSON;
+
 	gEngfuncs.GetViewAngles( (float *)viewangles );
 
 	if( !cam_thirdperson )
@@ -493,8 +654,21 @@ void CAM_ToThirdPerson( void )
 void CAM_ToFirstPerson( void ) 
 { 
 	cam_thirdperson = 0;
+	cam_idealview = VIEW_FIRSTPERSON;
 	
 	gEngfuncs.Cvar_SetValue( "cam_command", 0 );
+}
+
+// sc_chasecam: Sven-style first/third person toggle. Also cancels any
+// pending touch-orbit restore (the orbit values snap back immediately).
+void CAM_ToggleChasecam( void )
+{
+	gHUD.m_TouchOrbit.Cancel();
+
+	if( CL_IsThirdPerson() )
+		CAM_ToFirstPerson();
+	else
+		CAM_ToThirdPerson();
 }
 
 void CAM_ToggleSnapto( void )
@@ -518,6 +692,7 @@ void CAM_Init( void )
 	gEngfuncs.pfnAddCommand( "-camout", CAM_OutUp );
 	gEngfuncs.pfnAddCommand( "thirdperson", CAM_ToThirdPerson );
 	gEngfuncs.pfnAddCommand( "firstperson", CAM_ToFirstPerson );
+	gEngfuncs.pfnAddCommand( "sc_chasecam", CAM_ToggleChasecam );
 	gEngfuncs.pfnAddCommand( "+cammousemove",CAM_StartMouseMove);
 	gEngfuncs.pfnAddCommand( "-cammousemove",CAM_EndMouseMove);
 	gEngfuncs.pfnAddCommand( "+camdistance", CAM_StartDistance );
@@ -528,8 +703,14 @@ void CAM_Init( void )
 	cam_snapto			= gEngfuncs.pfnRegisterVariable( "cam_snapto", "0", 0 );	 // snap to thirdperson view
 	cam_idealyaw			= gEngfuncs.pfnRegisterVariable( "cam_idealyaw", "0", 0 );	 // thirdperson yaw
 	cam_idealpitch			= gEngfuncs.pfnRegisterVariable( "cam_idealpitch", "0", 0 );	 // thirperson pitch
-	cam_idealdist			= gEngfuncs.pfnRegisterVariable( "cam_idealdist", "128", 0 );	 // thirdperson distance
+	cam_idealdist			= gEngfuncs.pfnRegisterVariable( "cam_idealdist", "40", 0 );	 // thirdperson distance (plus CAM_DIST_OFFSET at runtime)
 	cam_contain			= gEngfuncs.pfnRegisterVariable( "cam_contain", "0", 0 );	// contain camera to world
+
+	// Camera point offset along the camera's own axes (x = right/left,
+	// y = extra forward/back, z = up/down).
+	cam_xoffset			= gEngfuncs.pfnRegisterVariable( "cam_xoffset", "0", 0 );
+	cam_yoffset			= gEngfuncs.pfnRegisterVariable( "cam_yoffset", "0", 0 );
+	cam_zoffset			= gEngfuncs.pfnRegisterVariable( "cam_zoffset", "10", 0 );
 
 	c_maxpitch			= gEngfuncs.pfnRegisterVariable( "c_maxpitch", "90.0", 0 );
 	c_minpitch			= gEngfuncs.pfnRegisterVariable( "c_minpitch", "0.0", 0 );
@@ -563,9 +744,13 @@ void CAM_ClearStates( void )
 	cam_ofs[1] = 0.0;
 	cam_ofs[2] = CAM_MIN_DIST;
 
+	cam_extra_ofs[0] = cam_xoffset ? cam_xoffset->value : 0.0f;
+	cam_extra_ofs[1] = cam_yoffset ? cam_yoffset->value : 0.0f;
+	cam_extra_ofs[2] = cam_zoffset ? cam_zoffset->value : 0.0f;
+
 	cam_idealpitch->value = viewangles[PITCH];
 	cam_idealyaw->value = viewangles[YAW];
-	cam_idealdist->value = CAM_MIN_DIST;
+	cam_idealdist->value = CAM_MIN_DIST - CAM_DIST_OFFSET;
 }
 
 void CAM_StartMouseMove( void )
@@ -658,4 +843,9 @@ int DLLEXPORT CL_IsThirdPerson( void )
 void DLLEXPORT CL_CameraOffset( float *ofs )
 {
 	VectorCopy( cam_ofs, ofs );
+}
+
+void DLLEXPORT CL_CameraExtraOffset( float *ofs )
+{
+	VectorCopy( cam_extra_ofs, ofs );
 }

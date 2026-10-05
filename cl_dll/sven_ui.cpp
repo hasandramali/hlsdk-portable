@@ -5,6 +5,9 @@
 #include "sven_ui_protocol.h"
 #include "triangleapi.h"
 #include "com_model.h"
+#include "event_api.h"
+#include "pm_defs.h"
+#include "camera.h"
 #include <map>
 #include <stdlib.h>
 #include "keydefs.h"
@@ -597,6 +600,10 @@ int SvenUI_Key(int down,int key)
 }
 extern "C" int DLLEXPORT IN_ClientTouchEvent(int type,int finger,float x,float y,float dx,float dy)
 {
+ // Center touch-orbit dot first: it consumes its own touches so the look
+ // area never steals a drag started on the dot.
+ if( gHUD.m_TouchOrbit.Event( type, finger, x, y, dx, dy ) )
+  return 1;
  if(!camera.active) return 0;
 #if USE_VGUI
  if(type==0) { // event_down
@@ -619,6 +626,167 @@ extern "C" int DLLEXPORT IN_ClientTouchEvent(int type,int finger,float x,float y
  }
 #endif
  return 1;
+}
+
+// Traceable crosshair state (overrides engine SetCrosshair: the sprite is
+// drawn at the eye-ray impact point, not the screen center).
+HSPRITE m_hsprCrosshair;
+wrect_t m_rcCrosshair;
+void SetCrosshair( HSPRITE sprite, wrect_t size, int k, int l, int m )
+{
+ (void)k; (void)l; (void)m;
+ m_hsprCrosshair = sprite;
+ m_rcCrosshair = size;
+}
+
+#define ESF_CROSSHAIR_MAX_DIST 8192.0f
+
+int CHudEsfCrosshair::Init( void )
+{
+ gHUD.AddHudElem( this );
+ CHudBase::m_iFlags |= HUD_ACTIVE;
+ m_hsprCrosshair = 0;
+ return 1;
+}
+int CHudEsfCrosshair::VidInit( void )
+{
+ return 1;
+}
+int CHudEsfCrosshair::Draw( float flTime )
+{
+ (void)flTime;
+ if( !m_hsprCrosshair )
+  return 0;
+ if( gHUD.m_fPlayerDead || g_iUser1 )
+  return 0;
+ cl_entity_t *local = gEngfuncs.GetLocalPlayer();
+ if( !local )
+  return 0;
+ vec3_t org, view_ofs, forward, end, screen;
+ VectorCopy( local->origin, org );
+ gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
+ VectorAdd( org, view_ofs, org );
+ AngleVectors( gHUD.m_vecAngles, forward, NULL, NULL );
+ VectorMA( org, ESF_CROSSHAIR_MAX_DIST, forward, end );
+ pmtrace_t tr;
+ gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
+ gEngfuncs.pEventAPI->EV_SetSolidPlayers( local->index - 1 );
+ gEngfuncs.pEventAPI->EV_PlayerTrace( org, end, PM_NORMAL, -1, &tr );
+ gEngfuncs.pTriAPI->WorldToScreen( tr.endpos, screen );
+ if( screen[2] <= 0.0f )
+  return 0; // behind the camera
+ int w = m_rcCrosshair.right - m_rcCrosshair.left;
+ int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
+ if( w <= 0 || h <= 0 )
+  return 0;
+ SPR_Set( m_hsprCrosshair, 255, 255, 255 );
+ SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
+ return 1;
+}
+
+// Center touch-orbit dot: finger-sized outlined box with a "." mark at the
+// screen center, visible only in third person. Dragging it orbits
+// cam_idealyaw/cam_idealpitch (same feel as touch look); the values snap
+// back 7s after release, or immediately on sc_chasecam toggle.
+#define TOUCH_ORBIT_SIZE_PX 120.0f
+#define TOUCH_ORBIT_REVERT_TIME 7.0f
+
+int CHudTouchOrbit::Init( void )
+{
+ gHUD.AddHudElem( this );
+ CHudBase::m_iFlags |= HUD_ACTIVE;
+ m_finger = -1;
+ m_session = false;
+ m_restoreAt = 0.0f;
+ return 1;
+}
+int CHudTouchOrbit::VidInit( void )
+{
+ return 1;
+}
+static void TouchOrbitRect( float &x0, float &y0, float &x1, float &y1 )
+{
+ float hw = ( TOUCH_ORBIT_SIZE_PX * 0.5f ) / (float)ScreenWidth;
+ float hh = ( TOUCH_ORBIT_SIZE_PX * 0.5f ) / (float)ScreenHeight;
+ x0 = 0.5f - hw; x1 = 0.5f + hw;
+ y0 = 0.5f - hh; y1 = 0.5f + hh;
+}
+int CHudTouchOrbit::Draw( float flTime )
+{
+ (void)flTime;
+ // Pending 7s restore runs even if something hid us meanwhile.
+ if( m_session && m_restoreAt > 0.0f && gEngfuncs.GetClientTime() >= m_restoreAt )
+  Cancel();
+ if( !CL_IsThirdPerson() )
+  return 0;
+ float nx0, ny0, nx1, ny1;
+ TouchOrbitRect( nx0, ny0, nx1, ny1 );
+ int x0 = (int)( nx0 * ScreenWidth ), y0 = (int)( ny0 * ScreenHeight );
+ int x1 = (int)( nx1 * ScreenWidth ), y1 = (int)( ny1 * ScreenHeight );
+ int t = 2;
+ // outlined finger box (4 thin strips; no texture, per request)
+ gHUD.DrawDarkRectangle( x0, y0, x1 - x0, t );
+ gHUD.DrawDarkRectangle( x0, y1 - t, x1 - x0, t );
+ gHUD.DrawDarkRectangle( x0, y0, t, y1 - y0 );
+ gHUD.DrawDarkRectangle( x1 - t, y0, t, y1 - y0 );
+ // centered "." mark so the spot is findable when the crosshair is hidden
+ int tw = 0, th = 0;
+ gEngfuncs.pfnDrawConsoleStringLen( ".", &tw, &th );
+ gHUD.DrawString( ( x0 + x1 - tw ) / 2, ( y0 + y1 - th ) / 2, x1, ".", 235, 240, 255 );
+ return 1;
+}
+int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, float dy )
+{
+ if( !CL_IsThirdPerson() )
+  return 0;
+ float nx0, ny0, nx1, ny1;
+ TouchOrbitRect( nx0, ny0, nx1, ny1 );
+ if( type == 0 ) // down
+ {
+  if( m_finger >= 0 )
+   return 0; // one orbit drag at a time
+  if( x < nx0 || x > nx1 || y < ny0 || y > ny1 )
+   return 0;
+  m_finger = finger;
+  m_baseYaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" );
+  m_basePitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" );
+  m_session = true;
+  m_restoreAt = 0.0f;
+  return 1;
+ }
+ if( finger != m_finger )
+  return 0;
+ if( type == 1 ) // up: snap back exactly 7s later
+ {
+  m_finger = -1;
+  m_restoreAt = gEngfuncs.GetClientTime() + TOUCH_ORBIT_REVERT_TIME;
+  return 1;
+ }
+ // motion: orbit like touch look (same sensitivities, smooth/linear)
+ if( dx != dx || dy != dy )
+  return 1;
+ float syaw = gEngfuncs.pfnGetCvarFloat( "touch_yaw" );
+ float spitch = gEngfuncs.pfnGetCvarFloat( "touch_pitch" );
+ if( syaw == 0.0f ) syaw = 120.0f;
+ if( spitch == 0.0f ) spitch = 90.0f;
+ float yaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" ) - dx * syaw;
+ float pitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" ) + dy * spitch;
+ if( pitch > 90.0f ) pitch = 90.0f;
+ if( pitch < -90.0f ) pitch = -90.0f;
+ gEngfuncs.Cvar_SetValue( "cam_idealyaw", yaw );
+ gEngfuncs.Cvar_SetValue( "cam_idealpitch", pitch );
+ return 1;
+}
+void CHudTouchOrbit::Cancel( void )
+{
+ if( m_session )
+ {
+  gEngfuncs.Cvar_SetValue( "cam_idealyaw", m_baseYaw );
+  gEngfuncs.Cvar_SetValue( "cam_idealpitch", m_basePitch );
+ }
+ m_session = false;
+ m_restoreAt = 0.0f;
+ m_finger = -1;
 }
 
 void SvenUI_Shutdown()

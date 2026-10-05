@@ -41,6 +41,7 @@ extern "C"
 {
 	int CL_IsThirdPerson( void );
 	void CL_CameraOffset( float *ofs );
+	void CL_CameraExtraOffset( float *ofs );
 
 	void DLLEXPORT V_CalcRefdef( struct ref_params_s *pparams );
 
@@ -557,10 +558,13 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	if( CL_IsThirdPerson() )
 	{
 		vec3_t ofs;
+		vec3_t extraOfs;
 
 		ofs[0] = ofs[1] = ofs[2] = 0.0f;
+		extraOfs[0] = extraOfs[1] = extraOfs[2] = 0.0f;
 
 		CL_CameraOffset( (float *)&ofs );
+		CL_CameraExtraOffset( (float *)&extraOfs );
 
 		VectorCopy( ofs, camAngles );
 		camAngles[ROLL]	= 0;
@@ -569,7 +573,13 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 
 		for( i = 0; i < 3; i++ )
 		{
-			pparams->vieworg[i] += -ofs[2] * camForward[i];
+			// Main distance along the camera forward axis, plus the
+			// cam_xoffset/cam_yoffset/cam_zoffset point offset along the
+			// camera's own axes (x = right, y = extra forward, z = up).
+			pparams->vieworg[i] += -ofs[2] * camForward[i]
+				+ extraOfs[0] * camRight[i]
+				+ extraOfs[1] * camForward[i]
+				+ extraOfs[2] * camUp[i];
 		}
 	}
 
