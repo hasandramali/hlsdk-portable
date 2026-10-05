@@ -40,6 +40,7 @@ extern "C"
 	void DLLEXPORT CAM_Think( void );
 	int DLLEXPORT CL_IsThirdPerson( void );
 	void DLLEXPORT CL_CameraOffset( float *ofs );
+	void DLLEXPORT CL_CameraExtraOffset( float *ofs );
 }
 
 extern cl_enginefunc_t gEngfuncs;
