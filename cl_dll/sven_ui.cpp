@@ -229,13 +229,13 @@ public:
 };
 class SvenMenu: public CMenuPanel
 {
- vgui::Label *title,*detail;
+ vgui::Label *title,*detail,*pageLabel;
  vgui::Button *rows[8],*tabs[4],*previous,*next,*exit;
  unsigned seen;
- int page,choice,kind,selected;
+ int page,choice,kind,selected,numPages;
  std::vector<std::string> playerIds;
 public:
- SvenMenu(int id): CMenuPanel(80,0,XRES(60),YRES(30),XRES(520),YRES(420)),seen(~0u),page(0),choice(0),kind(id),selected(-1)
+ SvenMenu(int id): CMenuPanel(80,0,XRES(60),YRES(30),XRES(520),YRES(420)),seen(~0u),page(0),choice(0),kind(id),selected(-1),numPages(1)
  {
   SetMenuID(id);
   title=new vgui::Label("",XRES(12),YRES(8),XRES(id==22 || id==23 || id==24 ? 320 : 490),YRES(30)); title->setParent(this); title->setBgColor(0,0,0,140); title->setFgColor(245,245,245,0); title->setContentAlignment(vgui::Label::a_west); title->setBorder(new vgui::LineBorder(vgui::Color(210,220,230,40)));
@@ -250,6 +250,7 @@ public:
   for(int i=0;i<8;++i) rows[i]=Button("",12,80+i*28,496,26,20,i);
   previous=Button("<",12,378,65,30,30,-1);
   next=Button(">",83,378,65,30,30,1);
+  pageLabel=new vgui::Label("",XRES(154),YRES(378),XRES(110),YRES(30)); pageLabel->setParent(this); pageLabel->setBgColor(0,0,0,140); pageLabel->setFgColor(235,240,255,0); pageLabel->setContentAlignment(vgui::Label::a_west);
   exit=Button("EXIT",395,378,113,30,40);
   Update();
  }
@@ -304,14 +305,17 @@ public:
    names.insert(names.end(),tracks.begin(),tracks.end());
    detail->setText("%s",tracks.empty()?"No tracks in playlist.txt / playlist.m3u.":tracks[std::max(0,std::min(trackIndex,(int)tracks.size()-1))].c_str());
   }
-  int pages=std::max(1,((int)names.size()+7)/8); page=std::max(0,std::min(page,pages-1));
+  int pages=std::max(1,((int)names.size()+7)/8); page=std::max(0,std::min(page,pages-1)); numPages=pages;
   for(int i=0;i<8 && page*8+i<(int)names.size();++i) { rows[i]->setText("%s",names[page*8+i].c_str()); rows[i]->setVisible(true); }
-  previous->setVisible(page>0); next->setVisible(page+1<pages);
+  // pager UI is always open on multi-page lists; < > wrap around (see Action 30)
+  previous->setVisible(pages>1); next->setVisible(pages>1);
+  pageLabel->setVisible(pages>1);
+  if(pages>1) pageLabel->setText("%d/%d",page+1,pages);
  }
  void Action(int action,int value)
  {
   if(action==40) { gViewPort->HideTopMenu(); return; }
-  if(action==30) { page+=value; Update(); return; }
+  if(action==30) { page+=value; if(page<0) page=numPages-1; else if(page>=numPages) page=0; Update(); return; }
   if(action==10) {
    if(kind==22 || kind==23) { choice=value; page=0; Update(); }
    else if(kind==26) {

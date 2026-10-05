@@ -838,7 +838,7 @@ void ScorePanel::FillGrid()
 						else if (health <= 0)
 						{
 							sprintf(sz, "DEAD");
-							pLabel->setFgColor(255, 5, 5, 0);
+							pLabel->setFgColor(255, 80, 40, 0);
 						}
 						else if (health > 75)
 						{
@@ -857,7 +857,7 @@ void ScorePanel::FillGrid()
 						}
 						else
 						{
-							pLabel->setFgColor(255, 5, 5, 0);
+							pLabel->setFgColor(255, 80, 40, 0);
 							sprintf(sz, "%d", health);
 						}
 					}
@@ -895,7 +895,7 @@ void ScorePanel::FillGrid()
 						}
 						else
 						{
-							pLabel->setFgColor(255, 5, 5, 0);
+							pLabel->setFgColor(255, 80, 40, 0);
 							sprintf(sz, "%d", armor);
 						}
 					}
