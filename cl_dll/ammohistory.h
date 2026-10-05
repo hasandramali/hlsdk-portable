@@ -128,6 +128,9 @@ public:
 
 extern WeaponsResource gWR;
 
+struct WEAPON;
+extern WEAPON *gpActiveSel; // NULL = weapon selection menu closed (ammo.cpp)
+
 #define MAX_HISTORY 12
 enum {
 	HISTSLOT_EMPTY,

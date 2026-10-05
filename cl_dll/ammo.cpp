@@ -334,6 +334,10 @@ void CHudAmmo::Reset( void )
 	gpActiveSel = NULL;
 	gHUD.m_iHideHUDDisplay = 0;
 
+	for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+		m_iNewPickupIds[i] = 0;
+	m_fMenuCloseAt = 0.0f;
+
 	gWR.Reset();
 	gHR.Reset();
 
@@ -589,7 +593,84 @@ int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 	// Add the weapon to the history
 	gHR.AddToHistory( HISTSLOT_WEAP, iIndex );
 
+	// Top-left text notifier (menu closed) or green menu highlight (menu open).
+	// WeapPickup itself is only sent for genuine ground pickups, so a weapon
+	// the player already holds never triggers anything here.
+	OnWeaponPickup( iIndex );
+
 	return 1;
+}
+
+// Seconds of menu quiet before it auto-closes. Refreshed on every nav step
+// and on every menu-open pickup.
+#define WEAPONMENU_CLOSE_TIME 5.0f
+
+void CHudAmmo::RefreshMenuTimer( void )
+{
+	m_fMenuCloseAt = gHUD.m_flTime + WEAPONMENU_CLOSE_TIME;
+}
+
+void CHudAmmo::CloseWeaponMenu( bool playSound )
+{
+	if( !gpActiveSel )
+		return;
+	gpLastSel = gpActiveSel;
+	gpActiveSel = NULL;
+	for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+		m_iNewPickupIds[i] = 0;
+	if( playSound )
+		PlaySound( "common/wpn_hudoff.wav", 1 );
+}
+
+bool CHudAmmo::IsNewPickupWeapon( int iId ) const
+{
+	if( iId <= 0 )
+		return false;
+	for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+		if( m_iNewPickupIds[i] == iId )
+			return true;
+	return false;
+}
+
+bool CHudAmmo::IsNewPickupSlot( int iSlot ) const
+{
+	for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+	{
+		if( m_iNewPickupIds[i] <= 0 )
+			continue;
+		WEAPON *p = gWR.GetWeapon( m_iNewPickupIds[i] );
+		if( p && p->iId && p->iSlot == iSlot )
+			return true;
+	}
+	return false;
+}
+
+void CHudAmmo::OnWeaponPickup( int iId )
+{
+	if( iId <= 0 || iId >= MAX_WEAPONS )
+		return;
+	if( gpActiveSel )
+	{
+		// Menu open: no top-left text (and the menu is never auto-opened
+		// from here); remember the id for a temporary green highlight and
+		// refresh the menu close timer.
+		for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+		{
+			if( m_iNewPickupIds[i] == iId )
+				break;
+			if( m_iNewPickupIds[i] <= 0 )
+			{
+				m_iNewPickupIds[i] = iId;
+				break;
+			}
+		}
+		RefreshMenuTimer();
+	}
+	else
+	{
+		// Menu closed: top-left text notifier only, menu stays closed.
+		gHUD.m_PickupNotify.OnWeaponPickup( iId );
+	}
 }
 
 int CHudAmmo::MsgFunc_ItemPickup( const char *pszName, int iSize, void *pbuf )
@@ -1153,6 +1234,7 @@ void CHudAmmo::UserCmd_NextWeapon( void )
 				if( wsp && gWR.HasAmmo( wsp ) )
 				{
 					gpActiveSel = wsp;
+					RefreshMenuTimer();
 					return;
 				}
 			}
@@ -1194,6 +1276,7 @@ void CHudAmmo::UserCmd_PrevWeapon( void )
 				if( wsp && gWR.HasAmmo( wsp ) )
 				{
 					gpActiveSel = wsp;
+					RefreshMenuTimer();
 					return;
 				}
 			}
@@ -1437,7 +1520,21 @@ int CHudAmmo::DrawWList( float flTime )
 	int r, g, b, x, y, a, i;
 
 	if( !gpActiveSel )
+	{
+		// Menu closed (by any path): temporary pickup greens expire here,
+		// so reopening the list always shows normal colors again.
+		for( int k = 0; k < MAX_NEW_PICKUPS; k++ )
+			m_iNewPickupIds[k] = 0;
 		return 0;
+	}
+
+	// Auto-close the menu after a quiet spell. Nav steps and menu-open
+	// pickups refresh the deadline via RefreshMenuTimer.
+	if( m_fMenuCloseAt > 0.0f && flTime >= m_fMenuCloseAt )
+	{
+		CloseWeaponMenu( true );
+		return 0;
+	}
 
 	int iActiveSlot;
 
@@ -1465,6 +1562,10 @@ int CHudAmmo::DrawWList( float flTime )
 		int iWidth;
 
 		UnpackRGB( r, g, b, RGB_BLUEISH );
+
+		// Fresh pickup lives in this slot: temporary green bucket.
+		if( IsNewPickupSlot( i ) )
+			UnpackRGB( r, g, b, RGB_GREENISH );
 
 		if( iActiveSlot == i )
 			a = 255;
@@ -1515,6 +1616,11 @@ int CHudAmmo::DrawWList( float flTime )
 					continue;
 
 				UnpackRGB( r, g, b, RGB_BLUEISH );
+
+				// Fresh pickup sitting in the open slot: temporary green
+				// weapon next to the green bucket.
+				if( IsNewPickupWeapon( p->iId ) )
+					UnpackRGB( r, g, b, RGB_GREENISH );
 
 				// if active, then we must have ammo.
 				if( gpActiveSel == p )

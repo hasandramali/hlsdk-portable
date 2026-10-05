@@ -1,6 +1,7 @@
 // Sven Co-op menu and interactive camera protocol. No server message IDs are hardcoded.
 #include "hud.h"
 #include "cl_util.h"
+#include "ammohistory.h"
 #include "sven_ui.h"
 #include "sven_ui_protocol.h"
 #include "triangleapi.h"
@@ -662,6 +663,18 @@ int CHudEsfCrosshair::Draw( float flTime )
  cl_entity_t *local = gEngfuncs.GetLocalPlayer();
  if( !local )
   return 0;
+ int w = m_rcCrosshair.right - m_rcCrosshair.left;
+ int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
+ if( w <= 0 || h <= 0 )
+  return 0;
+ if( !CL_IsThirdPerson() )
+ {
+  // First person: classic center-pinned crosshair (stock look). The
+  // traced impact projection is third-person only.
+  SPR_Set( m_hsprCrosshair, 255, 255, 255 );
+  SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
+  return 1;
+ }
  vec3_t org, view_ofs, forward, end, screen;
  VectorCopy( local->origin, org );
  gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
@@ -679,10 +692,6 @@ int CHudEsfCrosshair::Draw( float flTime )
   return 0; // behind the camera
  if( gEngfuncs.pfnGetCvarFloat( "crosshair" ) == 0.0f )
   return 0; // user hid the crosshair, same as stock
- int w = m_rcCrosshair.right - m_rcCrosshair.left;
- int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
- if( w <= 0 || h <= 0 )
-  return 0;
  SPR_Set( m_hsprCrosshair, 255, 255, 255 );
  SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
  return 1;
@@ -789,6 +798,159 @@ void CHudTouchOrbit::Cancel( void )
  m_session = false;
  m_restoreAt = 0.0f;
  m_finger = -1;
+}
+
+// Top-left weapon pickup notifier: green "weapon_<name>" text rows, max 3
+// visible. Overflow scrolls down fading out while fresh rows slide in from
+// the top with a fade-in. Console text has no per-glyph alpha, so fading
+// is done by scaling the green toward black (same trick as the
+// bottom-right history sprites).
+#define PICKUP_NOTIFY_X 10
+#define PICKUP_NOTIFY_Y 10
+#define PICKUP_NOTIFY_LIFE 4.0f
+#define PICKUP_NOTIFY_FADEIN 0.25f
+#define PICKUP_NOTIFY_FADEOUT 1.0f
+#define PICKUP_NOTIFY_SCROLL_PXSEC 240.0f
+#define PICKUP_NOTIFY_PUSHOUT_FADE 0.5f
+
+int CHudPickupNotify::Init( void )
+{
+ gHUD.AddHudElem( this );
+ CHudBase::m_iFlags |= HUD_ACTIVE;
+ m_count = 0;
+ for( int i = 0; i < MAX_NOTIFY; i++ )
+  m_items[i].iId = 0;
+ return 1;
+}
+int CHudPickupNotify::VidInit( void )
+{
+ m_count = 0;
+ for( int i = 0; i < MAX_NOTIFY; i++ )
+  m_items[i].iId = 0;
+ return 1;
+}
+void CHudPickupNotify::OnWeaponPickup( int iId )
+{
+ // GetWeapon does no bounds check (bare rgWeapons[] index), so clamp here.
+ if( iId <= 0 || iId >= MAX_WEAPONS )
+  return;
+ float now = gHUD.m_flTime;
+ // Same id twice in a row (server double-send): refresh, don't duplicate.
+ for( int i = 0; i < m_count; i++ )
+ {
+  if( m_items[i].iId == iId )
+  {
+   m_items[i].birth = now;
+   m_items[i].expire = now + PICKUP_NOTIFY_LIFE;
+   m_items[i].pushed = 0.0f;
+   return;
+  }
+ }
+ if( m_count >= MAX_NOTIFY )
+ {
+  // Full (3 visible + 1 scrolling out): drop the oldest outright.
+  m_count = MAX_NOTIFY - 1;
+ }
+ for( int i = m_count; i > 0; i-- )
+  m_items[i] = m_items[i - 1];
+ m_items[0].iId = iId;
+ m_items[0].birth = now;
+ m_items[0].expire = now + PICKUP_NOTIFY_LIFE;
+ m_items[0].y = 0.0f;
+ m_items[0].pushed = 0.0f;
+ m_items[0].placed = false;
+ m_count++;
+}
+int CHudPickupNotify::Draw( float flTime )
+{
+ (void)flTime;
+ // Same gating as the ammo HUD that feeds us: hidden with the weapons.
+ if( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) )
+  return 1;
+ float now = gHUD.m_flTime;
+ int lineH = gHUD.m_iFontHeight + 4;
+ if( lineH < 8 )
+  lineH = 18;
+ float dt = gHUD.m_flTimeDelta;
+ if( dt < 0.0f )
+  dt = 0.0f;
+ if( dt > 0.25f )
+  dt = 0.25f; // tab-away hitch: slide, don't teleport
+
+ // Animate + expire. Names resolve lazily here (not on pickup):
+ // WeaponList may arrive after WeapPickup, so the record might not exist
+ // on the pickup frame yet.
+ for( int i = 0; i < m_count; )
+ {
+  NotifyItem *it = &m_items[i];
+  float targetY = (float)( PICKUP_NOTIFY_Y + i * lineH );
+  if( !it->placed )
+  {
+   // Fresh rows enter from one line above, sliding down with fade-in.
+   it->y = targetY - (float)lineH;
+   it->placed = true;
+  }
+  else
+  {
+   float step = PICKUP_NOTIFY_SCROLL_PXSEC * dt;
+   if( it->y < targetY )
+    it->y = Q_min( it->y + step, targetY );
+   else if( it->y > targetY )
+    it->y = Q_max( it->y - step, targetY );
+  }
+  if( i >= MAXVIS_NOTIFY && it->pushed <= 0.0f )
+   it->pushed = now; // scrolled past the window: fast fade starts
+  float age = now - it->birth;
+  float a = 1.0f;
+  if( age < PICKUP_NOTIFY_FADEIN )
+   a = age / PICKUP_NOTIFY_FADEIN;
+  float remain = it->expire - now;
+  if( remain < PICKUP_NOTIFY_FADEOUT )
+   a = Q_min( a, remain / PICKUP_NOTIFY_FADEOUT );
+  if( it->pushed > 0.0f )
+   a = Q_min( a, 1.0f - ( now - it->pushed ) / PICKUP_NOTIFY_PUSHOUT_FADE );
+  it->alpha = a;
+  if( a <= 0.0f )
+  {
+   for( int k = i; k < m_count - 1; k++ )
+    m_items[k] = m_items[k + 1];
+   m_count--;
+   continue;
+  }
+  i++;
+ }
+
+ // Never paint over the open weapon menu (same top-left corner):
+ // entries keep aging underneath and expire on their own.
+ if( gpActiveSel )
+  return 1;
+
+ for( int i = 0; i < m_count; i++ )
+ {
+  NotifyItem *it = &m_items[i];
+  if( it->alpha <= 0.0f )
+   continue;
+  WEAPON *p = gWR.GetWeapon( it->iId );
+  if( !p || !p->iId )
+  {
+   if( now - it->birth > 1.0f )
+   {
+    // Weapon record never arrived: drop silently, no ghost row.
+    for( int k = i; k < m_count - 1; k++ )
+     m_items[k] = m_items[k + 1];
+    m_count--;
+    i--;
+   }
+   continue;
+  }
+  int g = (int)( 255.0f * it->alpha );
+  if( g < 0 )
+   g = 0;
+  if( g > 255 )
+   g = 255;
+  gHUD.DrawString( PICKUP_NOTIFY_X, (int)it->y, ScreenWidth, p->szName, 0, g, 0 );
+ }
+ return 1;
 }
 
 void SvenUI_Shutdown()

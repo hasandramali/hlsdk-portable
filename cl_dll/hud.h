@@ -151,12 +151,30 @@ public:
 	void _cdecl UserCmd_NextWeapon( void );
 	void _cdecl UserCmd_PrevWeapon( void );
 
+	// Fresh weapon pickup (WeapPickup): feeds the top-left text notifier
+	// when the weapon menu is closed, or paints a temporary green
+	// highlight on the pickup's slot (plus the weapon itself if it sits
+	// in the open slot) when the menu is open.
+	void OnWeaponPickup( int iId );
+
 private:
 	float m_fFade;
 	RGBA  m_rgba;
 	WEAPON *m_pWeapon;
 	int m_HUD_bucket0;
 	int m_HUD_selection;
+	// Temporary green-highlight weapon ids (menu-open pickups only).
+	// Cleared the moment the menu closes, so reopening shows normal
+	// colors again.
+	enum { MAX_NEW_PICKUPS = 4 };
+	int m_iNewPickupIds[MAX_NEW_PICKUPS];
+	// Auto-close deadline (client time) of the open weapon menu.
+	// Refreshed on every nav step and on every menu-open pickup.
+	float m_fMenuCloseAt;
+	bool IsNewPickupWeapon( int iId ) const;
+	bool IsNewPickupSlot( int iSlot ) const;
+	void RefreshMenuTimer( void );
+	void CloseWeaponMenu( bool playSound );
 };
 
 //
@@ -550,16 +568,43 @@ private:
 	icon_sprite_t m_IconList[MAX_ICONSPRITES];
 };
 
-// Traceable crosshair: instead of pinning the weapon sprite at the screen
-// center, draw it where the player's eye ray actually impacts (projected
-// to screen). Matters most in third person, where center-screen is not
-// where shots land.
+// Crosshair: classic center-pinned weapon sprite in first person; in
+// third person the sprite is drawn where the player's eye ray actually
+// impacts (projected to screen), since center-screen is not where shots
+// land there.
 class CHudEsfCrosshair : public CHudBase
 {
 public:
 	int Init( void );
 	int VidInit( void );
 	int Draw( float flTime );
+};
+
+// Top-left weapon pickup notifier: green "weapon_<name>" text rows (max 3
+// visible). Overflow scrolls down fading out while fresh rows fade in from
+// the top. Fed only when the weapon menu is closed (menu-open pickups show
+// as green highlights in the menu instead, never auto-opening it).
+class CHudPickupNotify : public CHudBase
+{
+public:
+	int Init( void );
+	int VidInit( void );
+	int Draw( float flTime );
+	void OnWeaponPickup( int iId );
+private:
+	enum { MAX_NOTIFY = 4, MAXVIS_NOTIFY = 3 };
+	struct NotifyItem
+	{
+		int iId;
+		float birth;
+		float expire;
+		float y;
+		float pushed; // client time when scrolled past the visible window (0 = visible)
+		float alpha; // current fade multiplier, recomputed every frame
+		bool placed;
+	};
+	NotifyItem m_items[MAX_NOTIFY];
+	int m_count;
 };
 
 // Center touch-orbit control: invisible box at the screen center, active
@@ -683,6 +728,7 @@ public:
 	CHudStatusIcons m_StatusIcons;
 	CHudEsfCrosshair m_EsfCrosshair;
 	CHudTouchOrbit m_TouchOrbit;
+	CHudPickupNotify m_PickupNotify;
 #if !USE_VGUI || USE_NOVGUI_SCOREBOARD
 	CHudScoreboard	m_Scoreboard;
 #endif

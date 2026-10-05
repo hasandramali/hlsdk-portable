@@ -540,6 +540,7 @@ void CHud::Init( void )
 	m_StatusIcons.Init();
 	m_EsfCrosshair.Init();
 	m_TouchOrbit.Init();
+	m_PickupNotify.Init();
 	SvenUI_Init();
 #if USE_VGUI
 	GetClientVoiceMgr()->Init(&g_VoiceStatusHelper, (vgui::Panel**)&gViewPort);
@@ -744,6 +745,7 @@ void CHud::VidInit( void )
 	m_StatusIcons.VidInit();
 	m_EsfCrosshair.VidInit();
 	m_TouchOrbit.VidInit();
+	m_PickupNotify.VidInit();
 #if USE_VGUI
 	GetClientVoiceMgr()->VidInit();
 #endif
