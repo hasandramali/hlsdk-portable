@@ -562,9 +562,10 @@ public:
 	int Draw( float flTime );
 };
 
-// Center touch-orbit dot: finger-sized "." box at the screen center,
-// visible only in third person. Dragging it orbits cam_idealyaw/pitch;
-// the values snap back 7s after release (or immediately on sc_chasecam).
+// Center touch-orbit control: invisible box at the screen center, active
+// only in third person. Dragging it orbits cam_idealyaw/pitch (hotter
+// than touch look, accelerating); yaw snaps back to 0 7s after release
+// (or immediately on sc_chasecam).
 class CHudTouchOrbit : public CHudBase
 {
 public:

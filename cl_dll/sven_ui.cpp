@@ -672,9 +672,13 @@ int CHudEsfCrosshair::Draw( float flTime )
  gEngfuncs.pEventAPI->EV_SetTraceHull( 2 );
  gEngfuncs.pEventAPI->EV_SetSolidPlayers( local->index - 1 );
  gEngfuncs.pEventAPI->EV_PlayerTrace( org, end, PM_NORMAL, -1, &tr );
- gEngfuncs.pTriAPI->WorldToScreen( tr.endpos, screen );
- if( screen[2] <= 0.0f )
+ // TriAPI WorldToScreen always writes screen[2] = 0 and reports
+ // clipping via its return value (1 = z-clipped/behind), so the return
+ // value -- not screen[2] -- is the behind-camera test.
+ if( gEngfuncs.pTriAPI->WorldToScreen( tr.endpos, screen ) )
   return 0; // behind the camera
+ if( gEngfuncs.pfnGetCvarFloat( "crosshair" ) == 0.0f )
+  return 0; // user hid the crosshair, same as stock
  int w = m_rcCrosshair.right - m_rcCrosshair.left;
  int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
  if( w <= 0 || h <= 0 )
@@ -684,12 +688,15 @@ int CHudEsfCrosshair::Draw( float flTime )
  return 1;
 }
 
-// Center touch-orbit dot: finger-sized outlined box with a "." mark at the
-// screen center, visible only in third person. Dragging it orbits
-// cam_idealyaw/cam_idealpitch (same feel as touch look); the values snap
-// back 7s after release, or immediately on sc_chasecam toggle.
+// Center touch-orbit control: fully invisible box at the screen center,
+// active only in third person. Dragging it orbits cam_idealyaw/
+// cam_idealpitch (hotter than touch look, accelerating); yaw snaps back
+// to 0 exactly 7s after release, or immediately on sc_chasecam toggle.
 #define TOUCH_ORBIT_SIZE_PX 120.0f
 #define TOUCH_ORBIT_REVERT_TIME 7.0f
+#define TOUCH_ORBIT_GAIN 1.4f
+#define TOUCH_ORBIT_ACCEL 400.0f
+#define TOUCH_ORBIT_GAIN_MAX 5.0f
 
 int CHudTouchOrbit::Init( void )
 {
@@ -714,25 +721,11 @@ static void TouchOrbitRect( float &x0, float &y0, float &x1, float &y1 )
 int CHudTouchOrbit::Draw( float flTime )
 {
  (void)flTime;
- // Pending 7s restore runs even if something hid us meanwhile.
+ // Fully invisible by request (opacity fully down), but the pending 7s
+ // restore still runs here. Touches keep working (see Event); the center
+ // crosshair marks the spot instead of the old box/dot.
  if( m_session && m_restoreAt > 0.0f && gEngfuncs.GetClientTime() >= m_restoreAt )
   Cancel();
- if( !CL_IsThirdPerson() )
-  return 0;
- float nx0, ny0, nx1, ny1;
- TouchOrbitRect( nx0, ny0, nx1, ny1 );
- int x0 = (int)( nx0 * ScreenWidth ), y0 = (int)( ny0 * ScreenHeight );
- int x1 = (int)( nx1 * ScreenWidth ), y1 = (int)( ny1 * ScreenHeight );
- int t = 2;
- // outlined finger box (4 thin strips; no texture, per request)
- gHUD.DrawDarkRectangle( x0, y0, x1 - x0, t );
- gHUD.DrawDarkRectangle( x0, y1 - t, x1 - x0, t );
- gHUD.DrawDarkRectangle( x0, y0, t, y1 - y0 );
- gHUD.DrawDarkRectangle( x1 - t, y0, t, y1 - y0 );
- // centered "." mark so the spot is findable when the crosshair is hidden
- int tw = 0, th = 0;
- gEngfuncs.pfnDrawConsoleStringLen( ".", &tw, &th );
- gHUD.DrawString( ( x0 + x1 - tw ) / 2, ( y0 + y1 - th ) / 2, x1, ".", 235, 240, 255 );
  return 1;
 }
 int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, float dy )
@@ -762,15 +755,21 @@ int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, flo
   m_restoreAt = gEngfuncs.GetClientTime() + TOUCH_ORBIT_REVERT_TIME;
   return 1;
  }
- // motion: orbit like touch look (same sensitivities, smooth/linear)
+ // motion: orbit with touch-look gains, slightly hotter and accelerating
+ // (ivmeli): fast flicks rotate proportionally further. dx/dy arrive as
+ // screen fractions (slow drag ~1e-5, hard flick ~1e-3 squared).
  if( dx != dx || dy != dy )
   return 1;
  float syaw = gEngfuncs.pfnGetCvarFloat( "touch_yaw" );
  float spitch = gEngfuncs.pfnGetCvarFloat( "touch_pitch" );
  if( syaw == 0.0f ) syaw = 120.0f;
  if( spitch == 0.0f ) spitch = 90.0f;
- float yaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" ) - dx * syaw;
- float pitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" ) + dy * spitch;
+ float speed2 = dx * dx + dy * dy;
+ float k = TOUCH_ORBIT_GAIN * ( 1.0f + TOUCH_ORBIT_ACCEL * speed2 );
+ if( k > TOUCH_ORBIT_GAIN_MAX )
+  k = TOUCH_ORBIT_GAIN_MAX;
+ float yaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" ) - dx * syaw * k;
+ float pitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" ) + dy * spitch * k;
  if( pitch > 90.0f ) pitch = 90.0f;
  if( pitch < -90.0f ) pitch = -90.0f;
  gEngfuncs.Cvar_SetValue( "cam_idealyaw", yaw );
@@ -781,7 +780,10 @@ void CHudTouchOrbit::Cancel( void )
 {
  if( m_session )
  {
-  gEngfuncs.Cvar_SetValue( "cam_idealyaw", m_baseYaw );
+  // Revert to the true original framing: straight-behind view
+  // (cam_idealyaw 0, its default); pitch returns to the value it had
+  // when the drag started.
+  gEngfuncs.Cvar_SetValue( "cam_idealyaw", 0.0f );
   gEngfuncs.Cvar_SetValue( "cam_idealpitch", m_basePitch );
  }
  m_session = false;
