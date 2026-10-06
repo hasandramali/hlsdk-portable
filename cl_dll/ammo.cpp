@@ -55,6 +55,31 @@ static bool SpriteNameHasScope( const char *name )
 	return false;
 }
 
+static HSPRITE LoadWeaponSprite( const char *spriteDir, const char *spriteName )
+{
+	char path[512];
+	HSPRITE sprite = 0;
+
+	if( !spriteName || !spriteName[0] )
+		return 0;
+
+	if( spriteDir && spriteDir[0] &&
+		( strncmp( spriteName, spriteDir, strlen( spriteDir ) ) ||
+		  ( spriteName[strlen( spriteDir )] != '/' && spriteName[strlen( spriteDir )] != '\0' ) ) )
+	{
+		snprintf( path, sizeof( path ), "sprites/%s/%s.spr", spriteDir, spriteName );
+		sprite = SPR_Load( path );
+	}
+
+	if( !sprite )
+	{
+		snprintf( path, sizeof( path ), "sprites/%s.spr", spriteName );
+		sprite = SPR_Load( path );
+	}
+
+	return sprite;
+}
+
 WeaponsResource gWR;
 
 int g_weaponselect = 0;
@@ -159,8 +184,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "crosshair", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hCrosshair = SPR_Load( sz );
+		pWeapon->hCrosshair = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcCrosshair = p->rc;
 	}
 	else
@@ -169,8 +193,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "autoaim", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hAutoaim = SPR_Load( sz );
+		pWeapon->hAutoaim = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcAutoaim = p->rc;
 	}
 	else
@@ -179,8 +202,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "zoom", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hZoomedCrosshair = SPR_Load( sz );
+		pWeapon->hZoomedCrosshair = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcZoomedCrosshair = p->rc;
 	}
 	else
@@ -197,8 +219,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		client_sprite_t *scope = &pList[scopeIndex];
 		if( scope->iRes == iRes && ( SpriteNameHasScope( scope->szName ) || SpriteNameHasScope( scope->szSprite ) ) )
 		{
-			snprintf( sz, sizeof( sz ), "sprites/%s.spr", scope->szSprite );
-			HSPRITE hScope = SPR_Load( sz );
+			HSPRITE hScope = LoadWeaponSprite( spriteDir, scope->szSprite );
 			if( hScope )
 			{
 				pWeapon->hZoomedCrosshair = hScope;
@@ -212,8 +233,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "zoom_autoaim", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hZoomedAutoaim = SPR_Load( sz );
+		pWeapon->hZoomedAutoaim = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcZoomedAutoaim = p->rc;
 	}
 	else
@@ -225,8 +245,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "weapon", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hInactive = SPR_Load( sz );
+		pWeapon->hInactive = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcInactive = p->rc;
 
 		gHR.iHistoryGap = Q_max( gHR.iHistoryGap, pWeapon->rcActive.bottom - pWeapon->rcActive.top );
@@ -237,8 +256,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "weapon_s", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hActive = SPR_Load( sz );
+		pWeapon->hActive = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcActive = p->rc;
 	}
 	else
@@ -247,8 +265,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "ammo", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hAmmo = SPR_Load( sz );
+		pWeapon->hAmmo = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcAmmo = p->rc;
 
 		gHR.iHistoryGap = Q_max( gHR.iHistoryGap, pWeapon->rcActive.bottom - pWeapon->rcActive.top );
@@ -259,8 +276,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	p = GetSpriteList( pList, "ammo2", iRes, i );
 	if( p )
 	{
-		sprintf( sz, "sprites/%s.spr", p->szSprite );
-		pWeapon->hAmmo2 = SPR_Load( sz );
+		pWeapon->hAmmo2 = LoadWeaponSprite( spriteDir, p->szSprite );
 		pWeapon->rcAmmo2 = p->rc;
 
 		gHR.iHistoryGap = Q_max( gHR.iHistoryGap, pWeapon->rcActive.bottom - pWeapon->rcActive.top );
