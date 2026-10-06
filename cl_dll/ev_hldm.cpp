@@ -818,12 +818,6 @@ void EV_SpinGauss( event_args_t *args )
 	if( EV_IsLocal( idx ) && args->bparam1 && !( gHUD.m_iKeyBits & IN_ATTACK2 ) )
 		return;
 
-	// Stock sven client (gaussspin.sc, 0x1001d6f0) folds the byte param into a
-	// stop marker: bparam1 nonzero keeps looping, bparam1 zero MUST stop the
-	// looped spin. Our old guess used SND_CHANGE_PITCH for bparam1 and never
-	// stopped, so a long +attack2 hold left the spin looping forever (only a
-	// fast tap fired gauss.sc, whose bparam2 path stopped it). Map bparam1/bparam2
-	// to SND_STOP (1<<5) so any zero-cancel sent by the server kills the loop.
 	iSoundState = args->bparam1 ? 0 : SND_STOP;
 	iSoundState = args->bparam2 ? SND_STOP : iSoundState;
 
@@ -1872,13 +1866,6 @@ enum displacer_e
 
 void EV_Displacer( event_args_t *args )
 {
-	// Stock events/displacer.sc only draws the lightning beam
-	// (sprites/lgtning.spr) from muzzle toward the teleport target; the fire
-	// animation and sound are driven server-side (svc_weaponanim / svc_sound).
-	// The opfor anim constants we used before belonged to a different viewmodel
-	// and broke the Sven animation, so the event is visual-only for now.
-	// TODO: mirror the beam from stock client.dll 0x100254e0 (needs an engine
-	// R_BeamPoints export).
 	( void )args;
 }
 //======================
@@ -1932,7 +1919,6 @@ void EV_FireEagle( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		// Stock (events/deagle.sc reverse): sequence = 5 + (mag empty != 0), body = 2.
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( ( args->bparam1 != 0 ) ? 6 : 5, 2 );
 	}
 
@@ -1940,7 +1926,6 @@ void EV_FireEagle( event_args_t *args )
 
 	EV_EjectBrass( ShellOrigin, ShellVelocity, angles[YAW], shell, TE_BOUNCE_SHELL );
 
-	// Play fire sound (stock: de_shot1.wav, vol 0.8-0.9, atten 0.8, pitch 0x62 + RandomLong(0,3)).
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/de_shot1.wav", gEngfuncs.pfnRandomFloat( 0.8, 0.9 ), ATTN_NORM, 0, 0x62 + gEngfuncs.pfnRandomLong( 0, 3 ) );
 
 	EV_GetGunPosition( args, vecSrc, origin );
@@ -2070,8 +2055,6 @@ void EV_FireM249( event_args_t *args )
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( M249_SHOOT1 + gEngfuncs.pfnRandomLong( 0, 2 ), args->iparam2 );
-		// Stock (events/m249.sc reverse) has NO view punch for the m249 - the
-		// recoil is purely the viewmodel animation, so do not V_PunchAxis here.
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
@@ -2246,8 +2229,6 @@ enum shockrifle_e
 	SHOCK_IDLE3
 };
 
-// Sven secondary fire: four attachment beams with a shared target when a
-// trace hits a moving actor. This is a separate event from shockrifle.sc.
 void EV_ShockBeam( event_args_t *args )
 {
 	const float spread[4][3] = {{1, 0, 0}, {0.995f, -0.0995f, 0},
@@ -2415,12 +2396,10 @@ void EV_FireSniper( event_args_t *args )
 			gEngfuncs.pEventAPI->EV_WeaponAnimation( SNIPER_FIRE, 0 );
 		}
 
-		// Sven client punch for the sniper kick (cl_wpn_punchangles gates it for testing).
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, -5.0 );
 	}
 
-	// Play fire sound (stock: sniper_fire.wav, pitch 0x62 + RandomLong(0,3)).
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/sniper_fire.wav", 1.0f, ATTN_NORM, 0, 0x62 + gEngfuncs.pfnRandomLong( 0, 3 ) );
 
 	EV_GetGunPosition( args, vecSrc, origin );
@@ -2513,7 +2492,7 @@ enum uzi_e
 	UZI_IDLE3,
 	UZI_RELOAD,
 	UZI_DRAW,
-	UZI_SHOOT // reverse-verified: stock client plays anim 5 on fire
+	UZI_SHOOT
 };
 
 void EV_FireUzi( event_args_t *args )
@@ -2544,7 +2523,6 @@ void EV_FireUzi( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( UZI_SHOOT, 0 );
 
-		// Sven client punch for the uzi kick (cl_wpn_punchangles gates it for testing).
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
@@ -2579,10 +2557,6 @@ void EV_FireUzi( event_args_t *args )
 //======================
 //	   UZIAKIMBO START (Sven stock: events/uziakimbo.sc)
 //======================
-// Stock client (client.dll binary reverse): anim comes from args->iparam1
-// with body 2; iparam1 >= 15 means both guns (fire_both1/2 + 2 bullets),
-// otherwise a single gun (shoot2/3 + 1 bullet). iparam1 is the viewmodel
-// sequence the server selected, so pass it through untouched.
 void EV_FireUziakimbo( event_args_t *args )
 {
 	int idx;
@@ -2612,7 +2586,6 @@ void EV_FireUziakimbo( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( args->iparam1, 2 );
 
-		// Sven client punch for the akimbo kick (cl_wpn_punchangles gates it for testing).
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
@@ -2655,7 +2628,7 @@ void EV_FireUziakimbo( event_args_t *args )
 //======================
 enum m16a2_e
 {
-	M16A2_FIRE1 = 4, // reverse-verified: stock plays 4 + RandomLong(0,1)
+	M16A2_FIRE1 = 4,
 	M16A2_FIRE2 = 5
 };
 
@@ -2687,7 +2660,6 @@ void EV_FireM16A2( event_args_t *args )
 		EV_MuzzleFlash();
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( M16A2_FIRE1 + gEngfuncs.pfnRandomLong( 0, 1 ), 0 );
 
-		// Sven client punch for the m16 kick (cl_wpn_punchangles gates it for testing).
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
@@ -2696,8 +2668,6 @@ void EV_FireM16A2( event_args_t *args )
 
 	EV_EjectBrass( ShellOrigin, ShellVelocity, angles[YAW], shell, TE_BOUNCE_SHELL );
 
-	// Stock plays the 3-round burst sample here (client.dll binary reverse:
-	// pitch base 103 + RandomLong(0,5)).
 	gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/m16_3round.wav", 1, ATTN_NORM, 0, 103 + gEngfuncs.pfnRandomLong( 0, 5 ));
 
 	EV_GetGunPosition( args, vecSrc, origin );
@@ -2709,9 +2679,6 @@ void EV_FireM16A2( event_args_t *args )
 //	    M16A2 END
 //======================
 
-// Sven client.dll 1001f9c0: iparam1 selects the operation; fparam1 is
-// the sound-table index, fparam2 volume, iparam2 channel. No weapon animation
-// or punch angle is encoded here (those belong to firing events).
 void EV_WeaponCustom( event_args_t *args )
 {
 	static const char *sounds[] = {
