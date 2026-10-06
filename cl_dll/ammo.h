@@ -36,6 +36,8 @@ struct WEAPON
 	int		iId;
 	int		iClip;
 	int		iClip2;		// second gun clip (dual uziakimbo only, -1 = n/a)
+	char		szSpriteDir[0x105];	// Sven CustWeapon record (+0x1b5)
+	char		szSpriteRecord[0x105];	// Sven WeaponSpr record (+0xb0)
 
 	int		iCount;		// # of itesm in plist
 

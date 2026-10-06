@@ -90,6 +90,13 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 
 	if( !pWeapon )
 		return;
+	if( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS )
+	{
+		if( !pWeapon->szSpriteDir[0] && s_szCustSprDir[pWeapon->iId][0] )
+			strlcpy( pWeapon->szSpriteDir, s_szCustSprDir[pWeapon->iId], sizeof( pWeapon->szSpriteDir ) );
+		if( !pWeapon->szSpriteRecord[0] && s_szWeaponSpr[pWeapon->iId][0] )
+			strlcpy( pWeapon->szSpriteRecord, s_szWeaponSpr[pWeapon->iId], sizeof( pWeapon->szSpriteRecord ) );
+	}
 
 	memset( &pWeapon->rcActive, 0, sizeof(wrect_t) );
 	memset( &pWeapon->rcInactive, 0, sizeof(wrect_t) );
@@ -108,14 +115,18 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	// subdirectory is present it loads "sprites/<subdir>/<weapon>.txt",
 	// otherwise the plain "sprites/<weapon>.txt". Custom map weapons (e.g.
 	// They Hunger: subdir "hunger/weapons") only exist under their subdir.
-	if( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS && s_szCustSprDir[pWeapon->iId][0] )
-		sprintf( sz, "sprites/%s/%s.txt", s_szCustSprDir[pWeapon->iId], pWeapon->szName );
+	const char *spriteDir = pWeapon->szSpriteDir[0] ? pWeapon->szSpriteDir :
+		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szCustSprDir[pWeapon->iId] : "" );
+	if( spriteDir[0] )
+		snprintf( sz, sizeof( sz ), "sprites/%s/%s.txt", spriteDir, pWeapon->szName );
 	else
-		sprintf( sz, "sprites/%s.txt", pWeapon->szName );
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", pWeapon->szName );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
-	if( !pList && pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS && s_szWeaponSpr[pWeapon->iId][0] )
+	const char *spriteRecord = pWeapon->szSpriteRecord[0] ? pWeapon->szSpriteRecord :
+		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szWeaponSpr[pWeapon->iId] : "" );
+	if( !pList && spriteRecord[0] )
 	{
-		snprintf( sz, sizeof( sz ), "sprites/%s.txt", s_szWeaponSpr[pWeapon->iId] );
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteRecord );
 		pList = SPR_GetList( sz, &i );
 	}
 
@@ -155,6 +166,25 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	{
 		pWeapon->hZoomedCrosshair = pWeapon->hCrosshair; //default to non-zoomed crosshair
 		pWeapon->rcZoomedCrosshair = pWeapon->rcCrosshair;
+	}
+
+	// Custom weapons may publish a separate scope entry instead of calling it
+	// "zoom". Discover it from the server-provided sprite list, never from a
+	// weapon classname, so newly-added AngelScript weapons work automatically.
+	for( int scopeIndex = 0; scopeIndex < i; scopeIndex++ )
+	{
+		client_sprite_t *scope = &pList[scopeIndex];
+		if( scope->iRes == iRes && ( strstr( scope->szName, "scope" ) || strstr( scope->szSprite, "scope" ) ) )
+		{
+			snprintf( sz, sizeof( sz ), "sprites/%s.spr", scope->szSprite );
+			HSPRITE hScope = SPR_Load( sz );
+			if( hScope )
+			{
+				pWeapon->hZoomedCrosshair = hScope;
+				pWeapon->rcZoomedCrosshair = scope->rc;
+			}
+			break;
+		}
 	}
 
 	p = GetSpriteList( pList, "zoom_autoaim", iRes, i );
@@ -829,7 +859,10 @@ int CHudAmmo::MsgFunc_WeaponSpr( const char *pszName, int iSize, void *pbuf )
 			gEngfuncs.Con_Printf( "TEMP-DIAG WeaponSpr id=%d spr=%s\n", iId, pszSpr );
 		WEAPON *pWeapon = gWR.GetWeapon( iId );
 		if( pWeapon && pWeapon->iId )
+		{
+			strlcpy( pWeapon->szSpriteRecord, pszSpr, sizeof( pWeapon->szSpriteRecord ) );
 			gWR.LoadWeaponSprites( pWeapon );
+		}
 	}
 
 	return 1;
@@ -1053,6 +1086,7 @@ int CHudAmmo::MsgFunc_WeaponList( const char *pszName, int iSize, void *pbuf )
 	BEGIN_READ( pbuf, iSize );
 	
 	WEAPON Weapon;
+	memset( &Weapon, 0, sizeof( Weapon ) );
 
 strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 
@@ -1136,7 +1170,10 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
 		WEAPON *pWeapon = gWR.GetWeapon( iId );
 		if( pWeapon && pWeapon->iId == iId )
+		{
+			strlcpy( pWeapon->szSpriteDir, pszDir, sizeof( pWeapon->szSpriteDir ) );
 			gWR.LoadWeaponSprites( pWeapon );
+		}
 	}
 
 	return 1;
@@ -1148,6 +1185,12 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 // Slot button pressed
 void CHudAmmo::SlotInput( int iSlot )
 {
+	if( gHUD.m_Menu.m_fMenuDisplayed )
+	{
+		gHUD.m_Menu.SelectMenuItem( iSlot + 1 );
+		return;
+	}
+
 #if USE_VGUI
 	// Let the Viewport use it first, for menus
 	if( gViewPort && gViewPort->SlotInput( iSlot ) )
