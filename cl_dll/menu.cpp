@@ -236,6 +236,8 @@ int CHudMenu::MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	m_bitsValidSlots = READ_SHORT();
 	int DisplayTime = READ_CHAR();
 	int NeedMore = READ_BYTE();
+	if( NeedMore == 0x80 )
+		NeedMore = 0;
 
 	if( DisplayTime > 0 )
 		m_flShutoffTime = DisplayTime + gHUD.m_flTime;

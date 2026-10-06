@@ -17,6 +17,7 @@
 #define __AMMO_H__
 
 #define MAX_WEAPON_NAME 128
+#define MAX_HUD_WEAPONS 256
 
 #define WEAPON_FLAGS_SELECTONEMPTY	1
 

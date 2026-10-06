@@ -832,7 +832,7 @@ int CHudPickupNotify::VidInit( void )
 void CHudPickupNotify::OnWeaponPickup( int iId )
 {
  // GetWeapon does no bounds check (bare rgWeapons[] index), so clamp here.
- if( iId <= 0 || iId >= MAX_WEAPONS )
+ if( iId <= 0 || iId >= MAX_HUD_WEAPONS )
   return;
  float now = gHUD.m_flTime;
  // Same id twice in a row (server double-send): refresh, don't duplicate.

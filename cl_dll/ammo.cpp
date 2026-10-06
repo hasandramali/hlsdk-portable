@@ -47,11 +47,12 @@ int g_weaponselect = 0;
 // CustWeapon carries [SHORT id][STRING subdir] (stock MsgFunc_CustWeapon
 // 0x100047d0 stores it at WEAPON+0x1b5); it is NEVER a class name, so it
 // must not enter the weapon inventory — it only selects the sprite set.
-static char s_szCustSprDir[MAX_WEAPONS][64];
+static char s_szCustSprDir[MAX_HUD_WEAPONS][64];
+static char s_szWeaponSpr[MAX_HUD_WEAPONS][264];
 
 void WeaponsResource::LoadAllWeaponSprites( void )
 {
-	for( int i = 0; i < MAX_WEAPONS; i++ )
+	for( int i = 0; i < MAX_HUD_WEAPONS; i++ )
 	{
 		if( rgWeapons[i].iId )
 			LoadWeaponSprites( &rgWeapons[i] );
@@ -98,16 +99,25 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	pWeapon->hActive = 0;
 	pWeapon->hAmmo = 0;
 	pWeapon->hAmmo2 = 0;
+	pWeapon->hCrosshair = 0;
+	pWeapon->hAutoaim = 0;
+	pWeapon->hZoomedCrosshair = 0;
+	pWeapon->hZoomedAutoaim = 0;
 
 	// Stock client.dll LoadWeaponSprites (0x10003d10): when the CustWeapon
 	// subdirectory is present it loads "sprites/<subdir>/<weapon>.txt",
 	// otherwise the plain "sprites/<weapon>.txt". Custom map weapons (e.g.
 	// They Hunger: subdir "hunger/weapons") only exist under their subdir.
-	if( pWeapon->iId > 0 && pWeapon->iId < MAX_WEAPONS && s_szCustSprDir[pWeapon->iId][0] )
+	if( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS && s_szCustSprDir[pWeapon->iId][0] )
 		sprintf( sz, "sprites/%s/%s.txt", s_szCustSprDir[pWeapon->iId], pWeapon->szName );
 	else
 		sprintf( sz, "sprites/%s.txt", pWeapon->szName );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
+	if( !pList && pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS && s_szWeaponSpr[pWeapon->iId][0] )
+	{
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", s_szWeaponSpr[pWeapon->iId] );
+		pList = SPR_GetList( sz, &i );
+	}
 
 	if( !pList )
 		return;
@@ -431,7 +441,7 @@ void CHudAmmo::Think( void )
 	{
 		gWR.iOldWeaponBits = gHUD.m_iWeaponBits;
 
-		for( int i = MAX_WEAPONS-1; i > 0; i-- )
+		for( int i = MAX_HUD_WEAPONS-1; i > 0; i-- )
 		{
 			WEAPON *p = gWR.GetWeapon( i );
 
@@ -471,7 +481,7 @@ void CHudAmmo::Think( void )
 //
 HSPRITE* WeaponsResource::GetAmmoPicFromWeapon( int iAmmoId, wrect_t& rect )
 {
-	for( int i = 0; i < MAX_WEAPONS; i++ )
+	for( int i = 0; i < MAX_HUD_WEAPONS; i++ )
 	{
 		if( rgWeapons[i].iAmmoType == iAmmoId )
 		{
@@ -647,7 +657,7 @@ bool CHudAmmo::IsNewPickupSlot( int iSlot ) const
 
 void CHudAmmo::OnWeaponPickup( int iId )
 {
-	if( iId <= 0 || iId >= MAX_WEAPONS )
+	if( iId <= 0 || iId >= MAX_HUD_WEAPONS )
 		return;
 	if( gpActiveSel )
 	{
@@ -800,10 +810,8 @@ int CHudAmmo::MsgFunc_TE_CUSTOM( const char *pszName, int iSize, void *pbuf )
 // Sven per-weapon sprite payload table, indexed by weapon id. WeaponSpr
 // (client.so 0xA328A) writes [SHORT id][STRING] into rgWeapons[id]+0xB0 and
 // reprocesses the weapon record (0xA2522); CustWeapon (+0x1B5) is the
-// separate sprite-subdirectory context. Stored here for observation; wired
-// into sprite loading once live logs show the payload shape.
-static char s_szWeaponSpr[MAX_WEAPONS][264];
-
+// separate sprite-subdirectory context. The payload is also used as a
+// fallback sprite-list name when the normal weapon list is unavailable.
 //
 // WeaponSpr -- Sven weapon sprite payload, svc 138: [SHORT id][STRING].
 //
@@ -814,7 +822,7 @@ int CHudAmmo::MsgFunc_WeaponSpr( const char *pszName, int iSize, void *pbuf )
 	int iId = READ_SHORT();
 	const char *pszSpr = READ_STRING();
 
-	if( iId > 0 && iId < MAX_WEAPONS && pszSpr && pszSpr[0] )
+	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszSpr && pszSpr[0] )
 	{
 		strlcpy( s_szWeaponSpr[iId], pszSpr, sizeof( s_szWeaponSpr[iId] ) );
 		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
@@ -940,7 +948,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		fOnTarget = TRUE;
 	}
 
-	if( iId < 1 || iId >= MAX_WEAPONS )
+	if( iId < 1 || iId >= MAX_HUD_WEAPONS )
 	{
 		SetCrosshair( 0, nullrc, 0, 0, 0 );
 		// Clear out the weapon so we don't keep drawing the last active weapon's ammo. - Solokiller
@@ -1075,7 +1083,7 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	Weapon.iClip = 0;
 	Weapon.iClip2 = -1; // dual-uzi second clip, filled from CurWeapon.iAmmo
 
-	if( Weapon.iId < 0 || Weapon.iId >= MAX_WEAPONS )
+	if( Weapon.iId < 0 || Weapon.iId >= MAX_HUD_WEAPONS )
 		return 0;
 
 	// Sven servers number slots 0..9+ (tall layout) while the vanilla HUD
@@ -1123,7 +1131,7 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 	int iId = READ_SHORT();
 	const char *pszDir = READ_STRING();
 
-	if( iId > 0 && iId < MAX_WEAPONS && pszDir && pszDir[0] )
+	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszDir && pszDir[0] )
 	{
 		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
 		WEAPON *pWeapon = gWR.GetWeapon( iId );
