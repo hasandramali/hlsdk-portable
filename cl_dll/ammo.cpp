@@ -39,6 +39,22 @@ WEAPON *gpLastSel;		// Last weapon menu selection
 
 client_sprite_t *GetSpriteList(client_sprite_t *pList, const char *psz, int iRes, int iCount);
 
+static bool SpriteNameHasScope( const char *name )
+{
+	for( const char *current = name; current && *current; current++ )
+	{
+		if( strlen( current ) < 5 )
+			break;
+		if( ( current[0] == 's' || current[0] == 'S' ) &&
+			( current[1] == 'c' || current[1] == 'C' ) &&
+			( current[2] == 'o' || current[2] == 'O' ) &&
+			( current[3] == 'p' || current[3] == 'P' ) &&
+			( current[4] == 'e' || current[4] == 'E' ) )
+			return true;
+	}
+	return false;
+}
+
 WeaponsResource gWR;
 
 int g_weaponselect = 0;
@@ -122,6 +138,11 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	else
 		snprintf( sz, sizeof( sz ), "sprites/%s.txt", pWeapon->szName );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
+	if( !pList && spriteDir[0] )
+	{
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", pWeapon->szName );
+		pList = SPR_GetList( sz, &i );
+	}
 	const char *spriteRecord = pWeapon->szSpriteRecord[0] ? pWeapon->szSpriteRecord :
 		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szWeaponSpr[pWeapon->iId] : "" );
 	if( !pList && spriteRecord[0] )
@@ -174,7 +195,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	for( int scopeIndex = 0; scopeIndex < i; scopeIndex++ )
 	{
 		client_sprite_t *scope = &pList[scopeIndex];
-		if( scope->iRes == iRes && ( strstr( scope->szName, "scope" ) || strstr( scope->szSprite, "scope" ) ) )
+		if( scope->iRes == iRes && ( SpriteNameHasScope( scope->szName ) || SpriteNameHasScope( scope->szSprite ) ) )
 		{
 			snprintf( sz, sizeof( sz ), "sprites/%s.spr", scope->szSprite );
 			HSPRITE hScope = SPR_Load( sz );
@@ -183,7 +204,8 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 				pWeapon->hZoomedCrosshair = hScope;
 				pWeapon->rcZoomedCrosshair = scope->rc;
 			}
-			break;
+			if( hScope )
+				break;
 		}
 	}
 
