@@ -228,6 +228,11 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		pWeapon->hZoomedCrosshair = pWeapon->hCrosshair; //default to non-zoomed crosshair
 		pWeapon->rcZoomedCrosshair = pWeapon->rcCrosshair;
 	}
+	if( p && ( SpriteNameHasScope( p->szName ) || SpriteNameHasScope( p->szSprite ) ) )
+	{
+		pWeapon->hScopeOverlay = pWeapon->hZoomedCrosshair;
+		pWeapon->rcScopeOverlay = p->rc;
+	}
 
 	// Custom weapons may publish a separate scope entry instead of calling it
 	// "zoom". Discover it from the server-provided sprite list, never from a

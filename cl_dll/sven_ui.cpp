@@ -677,17 +677,17 @@ int CHudEsfCrosshair::Draw( float flTime )
 	int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
 	int scopeW = m_rcScopeOverlay.right - m_rcScopeOverlay.left;
 	int scopeH = m_rcScopeOverlay.bottom - m_rcScopeOverlay.top;
+	if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
+	{
+		SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
+		SPR_DrawAdditive( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
+	}
 	if( !CL_IsThirdPerson() )
 	{
-	  if( m_hsprCrosshair && w > 0 && h > 0 )
+	  if( m_hsprCrosshair && m_hsprCrosshair != m_hsprScopeOverlay && w > 0 && h > 0 )
 	  {
 	   SPR_Set( m_hsprCrosshair, 255, 255, 255 );
 	   SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
-	  }
-	  if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
-	  {
-	   SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
-	   SPR_DrawAdditive( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
 	  }
 	  return 1;
 	}
@@ -706,15 +706,10 @@ int CHudEsfCrosshair::Draw( float flTime )
  // value -- not screen[2] -- is the behind-camera test.
  if( gEngfuncs.pTriAPI->WorldToScreen( tr.endpos, screen ) )
   return 0; // behind the camera
-	if( m_hsprCrosshair && w > 0 && h > 0 )
+	if( m_hsprCrosshair && m_hsprCrosshair != m_hsprScopeOverlay && w > 0 && h > 0 )
 	{
 	 SPR_Set( m_hsprCrosshair, 255, 255, 255 );
 	 SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
-	}
-	if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
-	{
-	 SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
-	 SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - scopeW / 2, YPROJECT( screen[1] ) - scopeH / 2, &m_rcScopeOverlay );
 	}
  return 1;
 }
