@@ -1124,7 +1124,12 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 	const char *pszDir = READ_STRING();
 
 	if( iId > 0 && iId < MAX_WEAPONS && pszDir && pszDir[0] )
+	{
 		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
+		WEAPON *pWeapon = gWR.GetWeapon( iId );
+		if( pWeapon && pWeapon->iId == iId )
+			gWR.LoadWeaponSprites( pWeapon );
+	}
 
 	return 1;
 }
