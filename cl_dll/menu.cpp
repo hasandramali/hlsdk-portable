@@ -204,13 +204,15 @@ int CHudMenu::Draw( float flTime )
 	return 1;
 }
 
-// selects an item from the menu
+// selects an item from AMXX or AngelScript server menus
 void CHudMenu::SelectMenuItem( int menu_item )
 {
 	// if menu_item is in a valid slot,  send a menuselect command to the server
 	if( ( menu_item > 0 ) && ( m_bitsValidSlots & ( 1 << ( menu_item - 1 ) ) ) )
 	{
 		char szbuf[32];
+		sprintf( szbuf, "menuselect %d\n", menu_item );
+		ClientCmd( szbuf );
 		sprintf( szbuf, "as_menuselect %d\n", menu_item );
 		ClientCmd( szbuf );
 

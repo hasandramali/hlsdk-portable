@@ -86,6 +86,7 @@ inline struct cvar_s *CVAR_CREATE( const char *cv, const char *val, const int fl
 // at the eye-ray impact point instead of the screen center. k/l/m are
 // accepted only for signature compatibility.
 extern void SetCrosshair( HSPRITE sprite, wrect_t size, int k, int l, int m );
+extern void SetScopeOverlay( HSPRITE sprite, wrect_t size );
 #define AngleVectors ( *gEngfuncs.pfnAngleVectors )
 extern cvar_t *hud_textmode;
 extern float g_hud_text_color[3];

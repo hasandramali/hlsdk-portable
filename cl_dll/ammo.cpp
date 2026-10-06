@@ -58,26 +58,42 @@ static bool SpriteNameHasScope( const char *name )
 static HSPRITE LoadWeaponSprite( const char *spriteDir, const char *spriteName )
 {
 	char path[512];
-	HSPRITE sprite = 0;
+	char resource[384];
+	const char *slash;
+	const char *extension;
+	HSPRITE sprite;
 
 	if( !spriteName || !spriteName[0] )
 		return 0;
 
-	if( spriteDir && spriteDir[0] &&
-		( strncmp( spriteName, spriteDir, strlen( spriteDir ) ) ||
-		  ( spriteName[strlen( spriteDir )] != '/' && spriteName[strlen( spriteDir )] != '\0' ) ) )
+	if( !strncmp( spriteName, "sprites/", 8 ) )
 	{
-		snprintf( path, sizeof( path ), "sprites/%s/%s.spr", spriteDir, spriteName );
-		sprite = SPR_Load( path );
+		strlcpy( resource, spriteName, sizeof( resource ) );
+	}
+	else
+	{
+		snprintf( resource, sizeof( resource ), "sprites/%s", spriteName );
 	}
 
-	if( !sprite )
-	{
-		snprintf( path, sizeof( path ), "sprites/%s.spr", spriteName );
-		sprite = SPR_Load( path );
-	}
+	slash = strrchr( resource, '/' );
+	extension = strrchr( resource, '.' );
+	if( extension && slash && extension < slash )
+		extension = NULL;
+	if( !extension )
+		strlcat( resource, ".spr", sizeof( resource ) );
 
-	return sprite;
+	sprite = SPR_Load( resource );
+	if( sprite || !spriteDir || !spriteDir[0] || !strncmp( spriteName, "sprites/", 8 ) )
+		return sprite;
+
+	snprintf( path, sizeof( path ), "sprites/%s/%s", spriteDir, spriteName );
+	slash = strrchr( path, '/' );
+	extension = strrchr( path, '.' );
+	if( extension && slash && extension < slash )
+		extension = NULL;
+	if( !extension )
+		strlcat( path, ".spr", sizeof( path ) );
+	return SPR_Load( path );
 }
 
 WeaponsResource gWR;
@@ -151,6 +167,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	pWeapon->hAutoaim = 0;
 	pWeapon->hZoomedCrosshair = 0;
 	pWeapon->hZoomedAutoaim = 0;
+	pWeapon->hScopeOverlay = 0;
 
 	// Stock client.dll LoadWeaponSprites (0x10003d10): when the CustWeapon
 	// subdirectory is present it loads "sprites/<subdir>/<weapon>.txt",
@@ -200,6 +217,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		pWeapon->hAutoaim = 0;
 
 	p = GetSpriteList( pList, "zoom", iRes, i );
+	client_sprite_t *zoomSprite = p;
 	if( p )
 	{
 		pWeapon->hZoomedCrosshair = LoadWeaponSprite( spriteDir, p->szSprite );
@@ -217,13 +235,14 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	for( int scopeIndex = 0; scopeIndex < i; scopeIndex++ )
 	{
 		client_sprite_t *scope = &pList[scopeIndex];
-		if( scope->iRes == iRes && ( SpriteNameHasScope( scope->szName ) || SpriteNameHasScope( scope->szSprite ) ) )
+		if( scope != zoomSprite && scope->iRes == iRes &&
+			( SpriteNameHasScope( scope->szName ) || SpriteNameHasScope( scope->szSprite ) ) )
 		{
 			HSPRITE hScope = LoadWeaponSprite( spriteDir, scope->szSprite );
 			if( hScope )
 			{
-				pWeapon->hZoomedCrosshair = hScope;
-				pWeapon->rcZoomedCrosshair = scope->rc;
+				pWeapon->hScopeOverlay = hScope;
+				pWeapon->rcScopeOverlay = scope->rc;
 			}
 			if( hScope )
 				break;
@@ -1107,6 +1126,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 				SetCrosshair( m_pWeapon->hZoomedAutoaim, m_pWeapon->rcZoomedAutoaim, 255, 255, 255 );
 			else
 				SetCrosshair( m_pWeapon->hZoomedCrosshair, m_pWeapon->rcZoomedCrosshair, 255, 255, 255 );
+			SetScopeOverlay( m_pWeapon->hScopeOverlay, m_pWeapon->rcScopeOverlay );
 		}
 	}
 

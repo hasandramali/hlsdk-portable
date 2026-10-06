@@ -633,11 +633,19 @@ extern "C" int DLLEXPORT IN_ClientTouchEvent(int type,int finger,float x,float y
 // drawn at the eye-ray impact point, not the screen center).
 HSPRITE m_hsprCrosshair;
 wrect_t m_rcCrosshair;
+static HSPRITE m_hsprScopeOverlay;
+static wrect_t m_rcScopeOverlay;
 void SetCrosshair( HSPRITE sprite, wrect_t size, int k, int l, int m )
 {
  (void)k; (void)l; (void)m;
  m_hsprCrosshair = sprite;
  m_rcCrosshair = size;
+ m_hsprScopeOverlay = 0;
+}
+void SetScopeOverlay( HSPRITE sprite, wrect_t size )
+{
+	m_hsprScopeOverlay = sprite;
+	m_rcScopeOverlay = size;
 }
 
 #define ESF_CROSSHAIR_MAX_DIST 8192.0f
@@ -656,25 +664,33 @@ int CHudEsfCrosshair::VidInit( void )
 int CHudEsfCrosshair::Draw( float flTime )
 {
  (void)flTime;
- if( !m_hsprCrosshair )
-  return 0;
+	if( !m_hsprCrosshair && !m_hsprScopeOverlay )
+		return 0;
  if( gHUD.m_fPlayerDead || g_iUser1 )
   return 0;
  cl_entity_t *local = gEngfuncs.GetLocalPlayer();
  if( !local )
   return 0;
- int w = m_rcCrosshair.right - m_rcCrosshair.left;
- int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
- if( w <= 0 || h <= 0 )
-  return 0;
- if( !CL_IsThirdPerson() )
- {
-  // First person: classic center-pinned crosshair (stock look). The
-  // traced impact projection is third-person only.
-  SPR_Set( m_hsprCrosshair, 255, 255, 255 );
-  SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
-  return 1;
- }
+	if( gEngfuncs.pfnGetCvarFloat( "crosshair" ) == 0.0f )
+		return 0;
+	int w = m_rcCrosshair.right - m_rcCrosshair.left;
+	int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
+	int scopeW = m_rcScopeOverlay.right - m_rcScopeOverlay.left;
+	int scopeH = m_rcScopeOverlay.bottom - m_rcScopeOverlay.top;
+	if( !CL_IsThirdPerson() )
+	{
+	  if( m_hsprCrosshair && w > 0 && h > 0 )
+	  {
+	   SPR_Set( m_hsprCrosshair, 255, 255, 255 );
+	   SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
+	  }
+	  if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
+	  {
+	   SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
+	   SPR_DrawAdditive( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
+	  }
+	  return 1;
+	}
  vec3_t org, view_ofs, forward, end, screen;
  VectorCopy( local->origin, org );
  gEngfuncs.pEventAPI->EV_LocalPlayerViewheight( view_ofs );
@@ -690,10 +706,16 @@ int CHudEsfCrosshair::Draw( float flTime )
  // value -- not screen[2] -- is the behind-camera test.
  if( gEngfuncs.pTriAPI->WorldToScreen( tr.endpos, screen ) )
   return 0; // behind the camera
- if( gEngfuncs.pfnGetCvarFloat( "crosshair" ) == 0.0f )
-  return 0; // user hid the crosshair, same as stock
- SPR_Set( m_hsprCrosshair, 255, 255, 255 );
- SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
+	if( m_hsprCrosshair && w > 0 && h > 0 )
+	{
+	 SPR_Set( m_hsprCrosshair, 255, 255, 255 );
+	 SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
+	}
+	if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
+	{
+	 SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
+	 SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - scopeW / 2, YPROJECT( screen[1] ) - scopeH / 2, &m_rcScopeOverlay );
+	}
  return 1;
 }
 

@@ -55,6 +55,8 @@ struct WEAPON
 	wrect_t rcAutoaim;
 	HSPRITE hZoomedCrosshair;
 	wrect_t rcZoomedCrosshair;
+	HSPRITE hScopeOverlay;
+	wrect_t rcScopeOverlay;
 	HSPRITE hZoomedAutoaim;
 	wrect_t rcZoomedAutoaim;
 };
