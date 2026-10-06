@@ -446,6 +446,7 @@ void CHudAmmo::Reset( void )
 	//VidInit();
 	wrect_t nullrc = {0,};
 	SetCrosshair( 0, nullrc, 0, 0, 0 ); // reset crosshair
+	SetScopeOverlay( 0, nullrc );
 	m_pWeapon = NULL; // reset last weapon
 }
 
@@ -1118,6 +1119,7 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	{
 		if( gHUD.m_iFOV >= 90 )
 		{
+			SetScopeOverlay( m_pWeapon->hScopeOverlay, m_pWeapon->rcScopeOverlay );
 			// normal crosshairs
 			if( fOnTarget && m_pWeapon->hAutoaim )
 				SetCrosshair( m_pWeapon->hAutoaim, m_pWeapon->rcAutoaim, 255, 255, 255 );

@@ -640,7 +640,6 @@ void SetCrosshair( HSPRITE sprite, wrect_t size, int k, int l, int m )
  (void)k; (void)l; (void)m;
  m_hsprCrosshair = sprite;
  m_rcCrosshair = size;
- m_hsprScopeOverlay = 0;
 }
 void SetScopeOverlay( HSPRITE sprite, wrect_t size )
 {
@@ -677,17 +676,23 @@ int CHudEsfCrosshair::Draw( float flTime )
 	int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
 	int scopeW = m_rcScopeOverlay.right - m_rcScopeOverlay.left;
 	int scopeH = m_rcScopeOverlay.bottom - m_rcScopeOverlay.top;
-	if( m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
+	if( gHUD.m_iFOV < 90 && m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
 	{
 		SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
-		SPR_DrawAdditive( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
+		if( gEngfuncs.pfnGetCvarFloat( "gl_spriteblend" ) == 0.0f )
+			SPR_DrawHoles( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
+		else
+			SPR_DrawAdditive( 0, ( ScreenWidth - scopeW ) / 2, ( ScreenHeight - scopeH ) / 2, &m_rcScopeOverlay );
 	}
 	if( !CL_IsThirdPerson() )
 	{
 	  if( m_hsprCrosshair && m_hsprCrosshair != m_hsprScopeOverlay && w > 0 && h > 0 )
 	  {
 	   SPR_Set( m_hsprCrosshair, 255, 255, 255 );
-	   SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
+	   if( gEngfuncs.pfnGetCvarFloat( "gl_spriteblend" ) == 0.0f )
+			SPR_DrawHoles( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
+		else
+			SPR_DrawAdditive( 0, ( ScreenWidth - w ) / 2, ( ScreenHeight - h ) / 2, &m_rcCrosshair );
 	  }
 	  return 1;
 	}
@@ -709,7 +714,10 @@ int CHudEsfCrosshair::Draw( float flTime )
 	if( m_hsprCrosshair && m_hsprCrosshair != m_hsprScopeOverlay && w > 0 && h > 0 )
 	{
 	 SPR_Set( m_hsprCrosshair, 255, 255, 255 );
-	 SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
+	 if( gEngfuncs.pfnGetCvarFloat( "gl_spriteblend" ) == 0.0f )
+		SPR_DrawHoles( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
+	 else
+		SPR_DrawAdditive( 0, XPROJECT( screen[0] ) - w / 2, YPROJECT( screen[1] ) - h / 2, &m_rcCrosshair );
 	}
  return 1;
 }
