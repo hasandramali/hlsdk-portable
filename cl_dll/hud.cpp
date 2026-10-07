@@ -492,7 +492,7 @@ void CHud::Init( void )
 	m_iFOV = 0;
 
 	CVAR_CREATE( "zoom_sensitivity_ratio", "1.2", FCVAR_ARCHIVE );
-	CVAR_CREATE( "gl_spriteblend", "1", FCVAR_ARCHIVE );
+	CVAR_CREATE( "gl_spriteblend", "0", 0 );
 	CVAR_CREATE( "cl_autowepswitch", "1", FCVAR_ARCHIVE | FCVAR_USERINFO );
 	m_pCvarDraw = CVAR_CREATE("hud_draw", "1", FCVAR_CLIENTDLL);
 	m_pCvarDebug = CVAR_CREATE("hud_debug", "0", FCVAR_CLIENTDLL);

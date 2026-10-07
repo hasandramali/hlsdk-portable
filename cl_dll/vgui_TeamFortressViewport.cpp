@@ -626,6 +626,16 @@ TeamFortressViewport::TeamFortressViewport( int x, int y, int wide, int tall ) :
 //-----------------------------------------------------------------------------
 void TeamFortressViewport::Initialize( void )
 {
+	static char initializedLevel[256];
+	const char *levelName = gEngfuncs.pfnGetLevelName();
+	if( !levelName )
+		levelName = "";
+	if( stricmp( initializedLevel, levelName ))
+	{
+		memset( g_PlayerExtraInfo, 0, sizeof g_PlayerExtraInfo );
+		strlcpy( initializedLevel, levelName, sizeof( initializedLevel ));
+	}
+
 	// Force each menu to Initialize
 	if( m_pTeamMenu )
 	{

@@ -260,7 +260,6 @@ void ScorePanel::Initialize( void )
 	m_fLastKillTime = 0;
 	m_iPlayerNum = 0;
 	m_iNumTeams = 0;
-	memset( g_PlayerExtraInfo, 0, sizeof g_PlayerExtraInfo );
 	memset( g_TeamInfo, 0, sizeof g_TeamInfo );
 }
 
