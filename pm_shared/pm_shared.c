@@ -3542,6 +3542,14 @@ void PM_Move( struct playermove_s *ppmove, int server )
 	
 	PM_PlayerMove( ( server != 0 ) ? true : false );
 
+#ifdef CLIENT_DLL
+	if( !server )
+	{
+		extern void update_player_info( int onground, int inwater, int walking );
+		update_player_info( pmove->onground != -1, pmove->waterlevel > 1, pmove->movetype == MOVETYPE_WALK );
+	}
+#endif
+
 	if( pmove->onground != -1 )
 	{
 		pmove->flags |= FL_ONGROUND;

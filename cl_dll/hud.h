@@ -621,9 +621,13 @@ public:
 	void Cancel( void );
 private:
 	int m_finger;
-	float m_baseYaw, m_basePitch;
+	int m_lookFingers[2];
+	float m_lookX[2], m_lookY[2];
+	float m_baseYaw, m_basePitch, m_baseDist, m_baseOffsetZ;
 	float m_restoreAt;
+	float m_lastTap, m_downX, m_downY;
 	qboolean m_session;
+	qboolean m_locked;
 };
 
 //

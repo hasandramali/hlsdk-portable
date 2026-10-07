@@ -704,7 +704,7 @@ void CAM_Init( void )
 	cam_snapto			= gEngfuncs.pfnRegisterVariable( "cam_snapto", "0", 0 );	 // snap to thirdperson view
 	cam_idealyaw			= gEngfuncs.pfnRegisterVariable( "cam_idealyaw", "0", 0 );	 // thirdperson yaw
 	cam_idealpitch			= gEngfuncs.pfnRegisterVariable( "cam_idealpitch", "0", 0 );	 // thirperson pitch
-	cam_idealdist			= gEngfuncs.pfnRegisterVariable( "cam_idealdist", "40", 0 );	 // thirdperson distance (plus CAM_DIST_OFFSET at runtime)
+	cam_idealdist			= gEngfuncs.pfnRegisterVariable( "cam_idealdist", "31", 0 );	 // thirdperson distance (plus CAM_DIST_OFFSET at runtime)
 	cam_contain			= gEngfuncs.pfnRegisterVariable( "cam_contain", "0", 0 );	// contain camera to world
 
 	// Camera point offset along the camera's own axes (x = right/left,

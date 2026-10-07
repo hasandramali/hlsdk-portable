@@ -726,11 +726,13 @@ int CHudEsfCrosshair::Draw( float flTime )
 // active only in third person. Dragging it orbits cam_idealyaw/
 // cam_idealpitch (hotter than touch look, accelerating); yaw snaps back
 // to 0 exactly 7s after release, or immediately on sc_chasecam toggle.
-#define TOUCH_ORBIT_SIZE_PX 120.0f
+#define TOUCH_ORBIT_SIZE_PX 121.0f
 #define TOUCH_ORBIT_REVERT_TIME 7.0f
-#define TOUCH_ORBIT_GAIN 1.4f
+#define TOUCH_ORBIT_GAIN 2.0f
 #define TOUCH_ORBIT_ACCEL 400.0f
 #define TOUCH_ORBIT_GAIN_MAX 5.0f
+#define TOUCH_ORBIT_DOUBLE_TAP 0.9f
+#define TOUCH_ORBIT_LOCK_OFFSET -24.0f
 
 int CHudTouchOrbit::Init( void )
 {
@@ -738,7 +740,10 @@ int CHudTouchOrbit::Init( void )
  CHudBase::m_iFlags |= HUD_ACTIVE;
  m_finger = -1;
  m_session = false;
+ m_locked = false;
  m_restoreAt = 0.0f;
+ m_lastTap = -1.0f;
+ m_lookFingers[0] = m_lookFingers[1] = -1;
  return 1;
 }
 int CHudTouchOrbit::VidInit( void )
@@ -755,19 +760,87 @@ static void TouchOrbitRect( float &x0, float &y0, float &x1, float &y1 )
 int CHudTouchOrbit::Draw( float flTime )
 {
  (void)flTime;
+ if( m_locked && !CL_IsThirdPerson() )
+  Cancel();
+ if( m_locked )
+ {
+  float x0, y0, x1, y1;
+  TouchOrbitRect( x0, y0, x1, y1 );
+  int x = (int)( x0 * ScreenWidth );
+  int y = (int)( y0 * ScreenHeight );
+  int w = (int)( ( x1 - x0 ) * ScreenWidth );
+  int h = (int)( ( y1 - y0 ) * ScreenHeight );
+  FillRGBA( x, y, w, 2, 255, 180, 32, 128 );
+  FillRGBA( x, y + h - 2, w, 2, 255, 180, 32, 128 );
+  FillRGBA( x, y, 2, h, 255, 180, 32, 128 );
+  FillRGBA( x + w - 2, y, 2, h, 255, 180, 32, 128 );
+ }
  // Fully invisible by request (opacity fully down), but the pending 7s
  // restore still runs here. Touches keep working (see Event); the center
  // crosshair marks the spot instead of the old box/dot.
- if( m_session && m_restoreAt > 0.0f && gEngfuncs.GetClientTime() >= m_restoreAt )
+ if( m_session && !m_locked && m_restoreAt > 0.0f && gEngfuncs.GetClientTime() >= m_restoreAt )
   Cancel();
  return 1;
 }
 int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, float dy )
 {
- if( !CL_IsThirdPerson() )
-  return 0;
- float nx0, ny0, nx1, ny1;
- TouchOrbitRect( nx0, ny0, nx1, ny1 );
+	if( !CL_IsThirdPerson() )
+	{
+	  if( m_locked ) Cancel();
+	  return 0;
+	}
+	float nx0, ny0, nx1, ny1;
+	TouchOrbitRect( nx0, ny0, nx1, ny1 );
+	qboolean onCenter = x >= nx0 && x <= nx1 && y >= ny0 && y <= ny1;
+	if( m_locked && (( x >= 0.5f && !onCenter ) || finger == m_lookFingers[0] || finger == m_lookFingers[1] ) )
+	{
+		int slot = finger == m_lookFingers[0] ? 0 : finger == m_lookFingers[1] ? 1 : -1;
+		if( type == 0 && x >= 0.5f && slot < 0 )
+		{
+			slot = m_lookFingers[0] < 0 ? 0 : m_lookFingers[1] < 0 ? 1 : -1;
+			if( slot >= 0 )
+			{
+				m_lookFingers[slot] = finger;
+				m_lookX[slot] = x;
+				m_lookY[slot] = y;
+			}
+			return 1;
+		}
+		if( slot < 0 )
+			return 1;
+		if( type == 1 )
+		{
+			m_lookFingers[slot] = -1;
+			return 1;
+		}
+		if( m_lookFingers[0] >= 0 && m_lookFingers[1] >= 0 )
+		{
+			float oldDX = m_lookX[0] - m_lookX[1];
+			float oldDY = m_lookY[0] - m_lookY[1];
+			float oldDistance = sqrtf( oldDX * oldDX + oldDY * oldDY );
+			m_lookX[slot] = x;
+			m_lookY[slot] = y;
+			float newDX = m_lookX[0] - m_lookX[1];
+			float newDY = m_lookY[0] - m_lookY[1];
+			float newDistance = sqrtf( newDX * newDX + newDY * newDY );
+			float distance = gEngfuncs.pfnGetCvarFloat( "cam_idealdist" ) + ( newDistance - oldDistance ) * 300.0f;
+			gEngfuncs.Cvar_SetValue( "cam_idealdist", Q_max( -150.0f, Q_min( 150.0f, distance ) ) );
+		}
+		else
+		{
+			float oldX = m_lookX[slot], oldY = m_lookY[slot];
+			m_lookX[slot] = x;
+			m_lookY[slot] = y;
+			float syaw = gEngfuncs.pfnGetCvarFloat( "touch_yaw" );
+			float spitch = gEngfuncs.pfnGetCvarFloat( "touch_pitch" );
+			if( syaw == 0.0f ) syaw = 120.0f;
+			if( spitch == 0.0f ) spitch = 90.0f;
+			gEngfuncs.Cvar_SetValue( "cam_idealyaw", gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" ) - ( x - oldX ) * syaw * TOUCH_ORBIT_GAIN );
+			float pitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" ) + ( y - oldY ) * spitch * TOUCH_ORBIT_GAIN;
+			gEngfuncs.Cvar_SetValue( "cam_idealpitch", Q_max( -90.0f, Q_min( 90.0f, pitch ) ) );
+		}
+		return 1;
+	}
  if( type == 0 ) // down
  {
   if( m_finger >= 0 )
@@ -775,10 +848,30 @@ int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, flo
   if( x < nx0 || x > nx1 || y < ny0 || y > ny1 )
    return 0;
   m_finger = finger;
-  m_baseYaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" );
-  m_basePitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" );
+  m_downX = x;
+  m_downY = y;
+  if( !m_session )
+  {
+   m_baseYaw = gEngfuncs.pfnGetCvarFloat( "cam_idealyaw" );
+   m_basePitch = gEngfuncs.pfnGetCvarFloat( "cam_idealpitch" );
+   m_baseDist = gEngfuncs.pfnGetCvarFloat( "cam_idealdist" );
+   m_baseOffsetZ = gEngfuncs.pfnGetCvarFloat( "cam_zoffset" );
+  }
   m_session = true;
   m_restoreAt = 0.0f;
+  float now = gEngfuncs.GetClientTime();
+  if( m_lastTap >= 0.0f && now - m_lastTap <= TOUCH_ORBIT_DOUBLE_TAP )
+  {
+   m_locked = !m_locked;
+   m_lastTap = -1.0f;
+   if( m_locked )
+   {
+    m_restoreAt = 0.0f;
+    gEngfuncs.Cvar_SetValue( "cam_zoffset", TOUCH_ORBIT_LOCK_OFFSET );
+   }
+   else
+    m_restoreAt = now + TOUCH_ORBIT_REVERT_TIME;
+  }
   return 1;
  }
  if( finger != m_finger )
@@ -786,7 +879,12 @@ int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, flo
  if( type == 1 ) // up: snap back exactly 7s later
  {
   m_finger = -1;
-  m_restoreAt = gEngfuncs.GetClientTime() + TOUCH_ORBIT_REVERT_TIME;
+  if( fabsf( x - m_downX ) + fabsf( y - m_downY ) < 0.01f )
+   m_lastTap = gEngfuncs.GetClientTime();
+  else
+   m_lastTap = -1.0f;
+  if( !m_locked )
+   m_restoreAt = gEngfuncs.GetClientTime() + TOUCH_ORBIT_REVERT_TIME;
   return 1;
  }
  // motion: orbit with touch-look gains, slightly hotter and accelerating
@@ -819,10 +917,15 @@ void CHudTouchOrbit::Cancel( void )
   // when the drag started.
   gEngfuncs.Cvar_SetValue( "cam_idealyaw", 0.0f );
   gEngfuncs.Cvar_SetValue( "cam_idealpitch", m_basePitch );
+  gEngfuncs.Cvar_SetValue( "cam_idealdist", m_baseDist );
+  gEngfuncs.Cvar_SetValue( "cam_zoffset", m_baseOffsetZ );
  }
  m_session = false;
+ m_locked = false;
  m_restoreAt = 0.0f;
  m_finger = -1;
+ m_lastTap = -1.0f;
+ m_lookFingers[0] = m_lookFingers[1] = -1;
 }
 
 // Top-left weapon pickup notifier: green "weapon_<name>" text rows, max 3
