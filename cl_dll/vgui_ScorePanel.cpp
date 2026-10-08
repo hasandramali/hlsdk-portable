@@ -825,6 +825,9 @@ void ScorePanel::FillGrid()
 				case COLUMN_HEALTH:
 					if (g_IsSpectator[m_iSortedRows[row]])
 					{
+						// Hostname blue (Scheme SC_PRIMARY1 = 102,102,153),
+						// one tick darker so it reads as a state, not a title.
+						pLabel->setFgColor(82, 82, 133, 0);
 						sprintf(sz, "OBSERVER");
 					}
 					else

@@ -2061,6 +2061,10 @@ int TeamFortressViewport::MsgFunc_ScoreInfo( const char *pszName, int iSize, voi
 
 	if( cl > 0 && cl <= MAX_PLAYERS )
 	{
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "ScoreInfo cl=%d score=%.0f health=%.0f deaths=%d armor=%.0f class=%d team=%d\n",
+				cl, score, health, deaths, armor, playerclass, teamnumber );
+
 		g_PlayerExtraInfo[cl].score = score;
 		g_PlayerExtraInfo[cl].health = health;
 		g_PlayerExtraInfo[cl].deaths = deaths;

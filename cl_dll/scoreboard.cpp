@@ -73,6 +73,13 @@ int CHudScoreboard::VidInit( void )
 
 void CHudScoreboard::InitHUDData( void )
 {
+	// Diagnostic: this memset is the ONLY in-game wipe of scoreboard health.
+	// If DEAD-after-background ever traces to an unexpected wipe, this line
+	// (with cl_goldsrc_debug >= 1) names the moment in the log.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "InitHUDData: clearing g_PlayerExtraInfo (%u bytes)\n",
+			(unsigned)sizeof g_PlayerExtraInfo );
+
 	memset( g_PlayerExtraInfo, 0, sizeof g_PlayerExtraInfo );
 	m_iLastKilledBy = 0;
 	m_fLastKillTime = 0;
