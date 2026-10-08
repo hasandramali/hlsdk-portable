@@ -957,6 +957,37 @@ int CHudPickupNotify::VidInit( void )
   m_items[i].iId = 0;
  return 1;
 }
+// Engine inventory row for the "[N]" prefix ("id:row ..." in
+// wl_pickup_rows, newest last). Absent id (engine message pending)
+// falls back to the plain name.
+static int PickupNotifyRow( int id )
+{
+ const char *s = CVAR_GET_STRING( "wl_pickup_rows" );
+ int row = -1;
+ if( !s )
+  return -1;
+ while( *s )
+ {
+  int pid = 0, prow = -1;
+  while( *s == ' ' )
+   s++;
+  if( *s < '0' || *s > '9' )
+   break;
+  while( *s >= '0' && *s <= '9' )
+   pid = pid * 10 + ( *s++ - '0' );
+  if( *s++ != ':' )
+   break;
+  if( *s < '0' || *s > '9' )
+   break;
+  prow = 0;
+  while( *s >= '0' && *s <= '9' )
+   prow = prow * 10 + ( *s++ - '0' );
+  if( pid == id )
+   row = prow; // last match wins (newest last)
+ }
+ return row;
+}
+
 void CHudPickupNotify::OnWeaponPickup( int iId )
 {
  // GetWeapon does no bounds check (bare rgWeapons[] index), so clamp here.
@@ -1076,7 +1107,17 @@ int CHudPickupNotify::Draw( float flTime )
    g = 0;
   if( g > 255 )
    g = 255;
-  gHUD.DrawString( PICKUP_NOTIFY_X, (int)it->y, ScreenWidth, p->szName, 0, g, 0 );
+  // "[N] weapon_name" with the engine inventory row (1-based, like the
+  // menu labels); plain name until the engine row arrives.
+  int row = PickupNotifyRow( it->iId );
+  if( row >= 0 )
+  {
+   char text[96];
+   snprintf( text, sizeof( text ), "[%d]%s", row + 1, p->szName );
+   gHUD.DrawString( PICKUP_NOTIFY_X, (int)it->y, ScreenWidth, text, 0, g, 0 );
+  }
+  else
+   gHUD.DrawString( PICKUP_NOTIFY_X, (int)it->y, ScreenWidth, p->szName, 0, g, 0 );
  }
  return 1;
 }
