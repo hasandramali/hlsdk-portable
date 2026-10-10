@@ -71,7 +71,7 @@ int CHudScoreboard::VidInit( void )
 	return 1;
 }
 
-void CHudScoreboard::InitHUDData( void )
+void HUD_ResetPlayerExtraInfo( void )
 {
 	// Diagnostic: this wipe is the ONLY in-game reset of scoreboard health.
 	// If DEAD-after-background ever traces to an unexpected wipe, this line
@@ -90,6 +90,12 @@ void CHudScoreboard::InitHUDData( void )
 	// that lie on screen until the next damage/heal event. -128 shows "-".
 	for( int i = 0; i <= MAX_PLAYERS; i++ )
 		g_PlayerExtraInfo[i].health = -128.0f;
+}
+
+void CHudScoreboard::InitHUDData( void )
+{
+	HUD_ResetPlayerExtraInfo();
+
 	m_iLastKilledBy = 0;
 	m_fLastKillTime = 0;
 	m_iPlayerNum = 0;

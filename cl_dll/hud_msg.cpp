@@ -71,6 +71,10 @@ void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
 	// MapList arrives during signon, before InitHUD. Keep the received list.
 	SvenUI_Reset(true);
+	// The shared scoreboard array is read by every panel (old and VGUI),
+	// but in VGUI builds no scoreboard object exists to wipe it, so reset
+	// it here explicitly (unknown state, shown as "-", never false DEAD).
+	HUD_ResetPlayerExtraInfo();
 	// prepare all hud data
 	HUDLIST *pList = m_pHudList;
 

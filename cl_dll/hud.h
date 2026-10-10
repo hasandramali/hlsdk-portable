@@ -356,6 +356,12 @@ extern extra_player_info_t  g_PlayerExtraInfo[MAX_PLAYERS + 1];   // additional 
 extern team_info_t			g_TeamInfo[MAX_TEAMS + 1];
 extern int					g_IsSpectator[MAX_PLAYERS + 1];
 
+// Wipes g_PlayerExtraInfo to the unknown state (health -128, shown as "-").
+// VGUI builds never construct CHudScoreboard, so this is the InitHUD wipe
+// that every scoreboard panel (old and VGUI) can rely on. Called every
+// InitHUD from CHud::MsgFunc_InitHUD; also reused by InitHUDData below.
+void HUD_ResetPlayerExtraInfo( void );
+
 //
 //-----------------------------------------------------
 //
