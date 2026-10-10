@@ -73,7 +73,7 @@ int CHudScoreboard::VidInit( void )
 
 void CHudScoreboard::InitHUDData( void )
 {
-	// Diagnostic: this memset is the ONLY in-game wipe of scoreboard health.
+	// Diagnostic: this wipe is the ONLY in-game reset of scoreboard health.
 	// If DEAD-after-background ever traces to an unexpected wipe, this line
 	// (with cl_goldsrc_debug >= 1) names the moment in the log.
 	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
@@ -81,6 +81,15 @@ void CHudScoreboard::InitHUDData( void )
 			(unsigned)sizeof g_PlayerExtraInfo );
 
 	memset( g_PlayerExtraInfo, 0, sizeof g_PlayerExtraInfo );
+
+	// Unknown, not dead: the server itself sends health=-128 as "pending"
+	// right after a wipe (verified in the log: -128 arrives before the
+	// first real value), and the panel already renders <=-128 as "-".
+	// Starting from 0 instead paints every not-yet-updated player as DEAD,
+	// and a lost update (packet loss, throttled background network) leaves
+	// that lie on screen until the next damage/heal event. -128 shows "-".
+	for( int i = 0; i <= MAX_PLAYERS; i++ )
+		g_PlayerExtraInfo[i].health = -128.0f;
 	m_iLastKilledBy = 0;
 	m_fLastKillTime = 0;
 	m_iPlayerNum = 0;

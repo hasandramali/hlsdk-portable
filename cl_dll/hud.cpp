@@ -550,9 +550,13 @@ void CHud::Init( void )
 #if !USE_VGUI || USE_NOVGUI_MOTD
 	m_MOTD.Init();
 #endif
-#if !USE_VGUI || USE_NOVGUI_SCOREBOARD
+	// Always init, even in VGUI builds: the old scoreboard owns the shared
+	// g_PlayerExtraInfo wipe (InitHUDData) that every panel reads. Without
+	// this, VGUI builds never reset the array (stale map data) and never
+	// run the unknown-state (-128) init. Its Draw stays inert (returns
+	// unless scores are held) and its message hooks stay gated below, so
+	// no double drawing or double ScoreInfo processing happens.
 	m_Scoreboard.Init();
-#endif
 
 	m_Menu.Init();
 
