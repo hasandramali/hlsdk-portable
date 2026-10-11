@@ -76,6 +76,8 @@ void EV_Displacer( struct event_args_s *args );
 void EV_FireEagle( struct event_args_s *args );
 void EV_Knife( struct event_args_s *args );
 void EV_FireM249( struct event_args_s *args );
+void EV_FireMinigun( struct event_args_s *args );
+void EV_SpinMinigun( struct event_args_s *args );
 void EV_PenguinFire( struct event_args_s *args );
 void EV_PipeWrench( struct event_args_s *args );
 void EV_ShockFire( struct event_args_s *args );
@@ -2678,6 +2680,97 @@ void EV_FireM16A2( event_args_t *args )
 //======================
 //	    M16A2 END
 //======================
+
+static void EV_MinigunSound( event_args_t *args, const char *sample )
+{
+	int pitch = 98 + gEngfuncs.pfnRandomLong( 0, 3 );
+	float volume = gEngfuncs.pfnRandomFloat( 0.92f, 1.0f );
+	gEngfuncs.pEventAPI->EV_PlaySound( args->entindex, args->origin, CHAN_ITEM, sample,
+		volume, 0.6f, 0, pitch );
+}
+
+void EV_FireMinigun( event_args_t *args )
+{
+	vec3_t forward, right, up, gunPosition, shellOrigin, shellVelocity;
+	AngleVectors( args->angles, forward, right, up );
+	EV_GetGunPosition( args, gunPosition, args->origin );
+	float sideways = gEngfuncs.pfnRandomFloat( 50, 70 );
+	float upwards = gEngfuncs.pfnRandomFloat( 80, 120 );
+	for( int axis = 0; axis < 3; axis++ )
+	{
+		shellVelocity[axis] = args->velocity[axis] + right[axis] * sideways + up[axis] * upwards + forward[axis] * 25;
+		shellOrigin[axis] = gunPosition[axis] + forward[axis] * 20 - up[axis] * 18 + right[axis] * 8;
+	}
+	int shell = gEngfuncs.pEventAPI->EV_FindModelIndex( "models/shell.mdl" );
+	if( shell > 0 ) EV_EjectBrass( shellOrigin, shellVelocity, args->angles[YAW], shell, TE_BOUNCE_SHELL );
+	EV_MinigunSound( args, "minigun/hw_shoot1.wav" );
+	float spread = 0.08716f;
+	if( args->velocity[0] == 0 && args->velocity[1] == 0 && args->velocity[2] == 0 )
+		spread = args->ducking == 1 ? 0.04362f : 0.06105f;
+	float spreadX, spreadY;
+	do
+	{
+		spreadX = gEngfuncs.pfnRandomFloat( -0.5f, 0.5f ) + gEngfuncs.pfnRandomFloat( -0.5f, 0.5f );
+		spreadY = gEngfuncs.pfnRandomFloat( -0.5f, 0.5f ) + gEngfuncs.pfnRandomFloat( -0.5f, 0.5f );
+	} while( spreadX * spreadX + spreadY * spreadY > 1 );
+	int tracer = 0;
+	EV_HLDM_FireBullets( args->entindex, forward, right, up, 1, gunPosition, forward,
+		2048, BULLET_MONSTER_12MM, 1, &tracer, spreadX * spread, spreadY * spread );
+	if( gEngfuncs.pEventAPI->EV_IsLocal( args->entindex - 1 ))
+	{
+		vec3_t angles;
+		gEngfuncs.GetViewAngles( angles );
+		angles[PITCH] += gEngfuncs.pfnRandomFloat( args->ducking ? -0.5f : -1.5f, args->ducking ? 0.5f : 1.5f );
+		angles[YAW] += gEngfuncs.pfnRandomFloat( args->ducking ? -0.25f : -1.0f, args->ducking ? 0.25f : 1.0f );
+		gEngfuncs.SetViewAngles( angles );
+		V_PunchAxis( PITCH, gEngfuncs.pfnRandomFloat( -1, 1 ));
+	}
+	dlight_t *light = gEngfuncs.pEfxAPI->CL_AllocDlight( 0 );
+	if( light )
+	{
+		for( int axis = 0; axis < 3; axis++ ) light->origin[axis] = gunPosition[axis] - up[axis] * 18 + forward[axis] * 60;
+		light->radius = 64;
+		light->color.r = 255;
+		light->color.g = 200;
+		light->color.b = 80;
+		light->die = gEngfuncs.GetClientTime() + 0.2f;
+		light->decay = 0;
+	}
+}
+
+void EV_SpinMinigun( event_args_t *args )
+{
+	static float nextSpin = 0;
+	static float lastTime = 0;
+	gEngfuncs.pEventAPI->EV_KillEvents( args->entindex, "events/minigun.sc" );
+	const char *sample;
+	int animation;
+	float time = gEngfuncs.GetClientTime();
+	if( time < lastTime ) nextSpin = 0;
+	lastTime = time;
+	switch( args->iparam1 )
+	{
+	case 0:
+		if( time < nextSpin ) return;
+		nextSpin = time + 0.4f;
+		sample = "hassault/hw_spin.wav";
+		animation = -1;
+		break;
+	case 1:
+		sample = "hassault/hw_spinup.wav";
+		animation = 6;
+		break;
+	case 2:
+		sample = "hassault/hw_spindown.wav";
+		animation = 7;
+		break;
+	default:
+		return;
+	}
+	EV_MinigunSound( args, sample );
+	if( animation >= 0 && gEngfuncs.pEventAPI->EV_IsLocal( args->entindex - 1 ))
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( animation, 0 );
+}
 
 void EV_WeaponCustom( event_args_t *args )
 {
