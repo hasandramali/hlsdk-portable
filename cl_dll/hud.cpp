@@ -378,28 +378,7 @@ int __MsgFunc_AllowSpec( const char *pszName, int iSize, void *pbuf )
  
 int __MsgFunc_StartSound( const char *pszName, int iSize, void *pbuf )
 {
-	BEGIN_READ( pbuf, iSize );
-
-	int flags = READ_SHORT();
-	int entindex = READ_SHORT();
-	int attn = READ_BYTE();
-	float offset = READ_FLOAT();
-	int channel = READ_BYTE();
-	int soundindex = READ_SHORT();
-
-	/*
-	m.WriteShort(int16(49172)); // ??? (flags, probably)
-	m.WriteShort(0);            // entity index
-	m.WriteByte(0);             // ??? (value doesn't seem to matter)
-	m.WriteFloat(5.234);        // offset in seconds
-	m.WriteByte(7);             // sound channel
-	m.WriteShort(711);          // sound index (subtract 4 from the line number in soundcache/mapname.txt)
-	*/
-
-	// FIXME (sound debugging shelved 2026-09-24): a real soundcache table
-	// resolver + test_sven_sound command lived here (see git history); the
-	// engine owns svc107 playback, this stays a read-and-discard stub.
-	return 0;
+	return 1;
 }
 
 #if USE_VGUI

@@ -406,6 +406,19 @@ int CHudMessage::Draw( float fTime )
 
 void CHudMessage::MessageAdd( const char *pName, float time )
 {
+	client_textmessage_t *channelMessage = TextMessageGet( pName[0] == '#' ? pName + 1 : pName );
+	if( channelMessage )
+	{
+		for( int messageIndex = 0; messageIndex < maxHUDMessages; messageIndex++ )
+		{
+			if( m_pMessages[messageIndex] == channelMessage )
+			{
+				m_startTime[messageIndex] = time;
+				return;
+			}
+		}
+	}
+
 	int i, j;
 	client_textmessage_t *tempMessage;
 
