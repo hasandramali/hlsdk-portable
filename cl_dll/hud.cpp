@@ -430,13 +430,6 @@ extern void SvenEffects_Init();
 // scoreboard.cpp (excluded from VGUI builds), so the symbol always links.
 void HUD_ResetPlayerExtraInfo( void )
 {
-	// Diagnostic: this wipe is the ONLY in-game reset of scoreboard health.
-	// If DEAD-after-background ever traces to an unexpected wipe, this line
-	// (with cl_goldsrc_debug >= 1) names the moment in the log.
-	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
-		gEngfuncs.Con_Printf( "InitHUDData: clearing g_PlayerExtraInfo (%u bytes)\n",
-			(unsigned)sizeof g_PlayerExtraInfo );
-
 	memset( g_PlayerExtraInfo, 0, sizeof g_PlayerExtraInfo );
 
 	// Unknown, not dead: the server itself sends health=-128 as "pending"
