@@ -97,6 +97,11 @@ int ScrollTextUp( void )
 
 int CHudSayText::Draw( float flTime )
 {
+	int textWidth = 0;
+	gEngfuncs.pfnDrawConsoleStringLen( "Ag", &textWidth, &line_height );
+	line_height = Q_max( line_height, 1 );
+	Y_START = ScreenHeight - ( ScreenHeight >= 480 ? 60 : 45 );
+	Y_START -= line_height * ( MAX_LINES + 1 );
 	int y = Y_START;
 
 #if USE_VGUI
@@ -234,7 +239,7 @@ void CHudSayText::SayTextPrint( const char *pszBuf, int iBufSize, int clientInde
 void CHudSayText::EnsureTextFitsInOneLineAndWrapIfHaveTo( int line )
 {
 	int line_width = 0;
-	GetConsoleStringSize( g_szLineBuffer[line], &line_width, &line_height );
+	gEngfuncs.pfnDrawConsoleStringLen( g_szLineBuffer[line], &line_width, &line_height );
 
 	if( ( line_width + LINE_START ) > MAX_LINE_WIDTH )
 	{
@@ -267,7 +272,7 @@ void CHudSayText::EnsureTextFitsInOneLineAndWrapIfHaveTo( int line )
 				last_break = x;
 
 			buf[0] = *x;  // get the length of the current character
-			GetConsoleStringSize( buf, &tmp_len, &line_height );
+			gEngfuncs.pfnDrawConsoleStringLen( buf, &tmp_len, &line_height );
 			length += tmp_len;
 
 			if( length > MAX_LINE_WIDTH )

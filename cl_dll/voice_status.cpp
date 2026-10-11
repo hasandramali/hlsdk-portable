@@ -300,7 +300,9 @@ int CVoiceStatus::VidInit()
 void CVoiceStatus::Frame(double frametime)
 {
 	// check server banned players once per second
-	if(gEngfuncs.GetClientTime() - m_LastUpdateServerState > 1)
+	if(gEngfuncs.GetClientTime() < m_LastUpdateServerState)
+		UpdateServerState(true);
+	else if(gEngfuncs.GetClientTime() - m_LastUpdateServerState > 1)
 	{
 		UpdateServerState(false);
 	}
@@ -528,7 +530,7 @@ void CVoiceStatus::UpdateServerState(bool bForce)
 		for(unsigned int i=0; i < 32; i++)
 		{
 			char playerID[16];
-			if(!gEngfuncs.GetPlayerUniqueID(i+1, playerID))
+			if(!gEngfuncs.GetPlayerUniqueID(dw*32+i+1, playerID))
 				continue;
 
 			if(m_BanMgr.GetPlayerBan(playerID))
@@ -624,6 +626,9 @@ void CVoiceStatus::UpdateBanButton(int iClient)
 
 void CVoiceStatus::HandleVoiceMaskMsg(int iSize, void *pbuf)
 {
+	if( iSize < VOICE_MAX_PLAYERS_DW * 8 )
+		return;
+
 	BEGIN_READ( pbuf, iSize );
 
 	unsigned int dw;
@@ -645,7 +650,8 @@ void CVoiceStatus::HandleVoiceMaskMsg(int iSize, void *pbuf)
 		}
 	}
 
-	m_bServerModEnable = READ_BYTE();
+	if( iSize > VOICE_MAX_PLAYERS_DW * 8 )
+		m_bServerModEnable = READ_BYTE();
 }
 
 void CVoiceStatus::HandleReqStateMsg(int iSize, void *pbuf)
