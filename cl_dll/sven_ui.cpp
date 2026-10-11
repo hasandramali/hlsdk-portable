@@ -508,6 +508,12 @@ int SvenUI_MapList(const char *,int size,void *data)
  if(!SvenUI::ReadMaps(data,size,maps)) return 0;
  Refresh(); return 1;
 }
+static int ServerMapList(const char *,int size,void *data)
+{
+ std::vector<std::string> next;
+ if(!SvenUI::ReadMapCycle(data,size,next)) return 0;
+ maps.swap(next); Refresh(); return 1;
+}
 static void OpenVote() {
 #if USE_VGUI
  if(gViewPort && !camera.active) gViewPort->ShowVGUIMenu(22);
@@ -555,6 +561,7 @@ void SvenUI_Init()
  gEngfuncs.pfnHookUserMsg("InvAdd",AddItem);
  gEngfuncs.pfnHookUserMsg("InvRemove",SvenUI_InvRemove);
  gEngfuncs.pfnHookUserMsg("MapList",SvenUI_MapList);
+ gEngfuncs.pfnHookUserMsg("ServerMapList",ServerMapList);
  gEngfuncs.pfnAddCommand("votemenu",OpenVote);
  gEngfuncs.pfnAddCommand("votemapmenu",OpenMaps);
  gEngfuncs.pfnAddCommand("vgui_votemap",OpenMaps);

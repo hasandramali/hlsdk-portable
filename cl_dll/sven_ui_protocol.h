@@ -86,6 +86,44 @@ inline bool ReadMaps(const void *data,int size,std::vector<std::string> &maps)
  if(!r.done()) return false;
  maps.swap(next); return true;
 }
+inline bool ReadMapCycle(const void *data,int size,std::vector<std::string> &maps)
+{
+ if(!data || size<1 || size>65536) return false;
+ const char *text=(const char *)data;
+ if(text[size-1] || memchr(text,0,size-1)) return false;
+ std::vector<std::string> next;
+ int depth=0;
+ const char *end=text+size-1;
+ if(!strcmp(text,"mapcycle failure")) { maps.clear(); return true; }
+ while(text<end) {
+  const char *lineEnd=text;
+  while(lineEnd<end && *lineEnd!='\r' && *lineEnd!='\n') ++lineEnd;
+  while(text<lineEnd && (*text==' ' || *text=='\t')) ++text;
+  const char *contentEnd=text;
+  while(contentEnd<lineEnd && !(contentEnd+1<lineEnd && contentEnd[0]=='/' && contentEnd[1]=='/')) ++contentEnd;
+  const char *nameEnd=text;
+  while(nameEnd<contentEnd && *nameEnd!=' ' && *nameEnd!='\t' && *nameEnd!='{') ++nameEnd;
+  if(!depth && text<nameEnd && *text!='#') {
+   std::string name(text,nameEnd);
+   if(name.size()>=2 && name[0]=='"' && name[name.size()-1]=='"') name=name.substr(1,name.size()-2);
+   bool valid=!name.empty() && name.size()<=255;
+   for(size_t index=0;index<name.size();++index) {
+    unsigned char character=name[index];
+    if(!((character>='a' && character<='z') || (character>='A' && character<='Z')
+      || (character>='0' && character<='9') || character=='_' || character=='-' || character=='/')) valid=false;
+   }
+   if(valid && std::find(next.begin(),next.end(),name)==next.end()) next.push_back(name);
+   if(next.size()>4096) return false;
+  }
+  for(const char *cursor=text;cursor<contentEnd;++cursor) {
+   if(*cursor=='{') ++depth;
+   else if(*cursor=='}' && depth) --depth;
+  }
+  text=lineEnd;
+  while(text<end && (*text=='\r' || *text=='\n')) ++text;
+ }
+ maps.swap(next); return true;
+}
 // Never interpolate server/player text into the console command language.
 inline bool SafeArgument(const std::string &s)
 {
