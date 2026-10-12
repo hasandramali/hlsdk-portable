@@ -21,6 +21,75 @@ static SvenUI::Vote vote;
 static float voteEnd;
 static float lastExitRequest=-10;
 static unsigned revision;
+class SvenInventoryHud : public CHudBase
+{
+ HSPRITE sprite;
+ wrect_t rectangle;
+ int width, height;
+ unsigned loadedRevision;
+public:
+ int Init()
+ {
+  m_iFlags=HUD_ACTIVE;
+  gHUD.AddHudElem(this);
+  Reset();
+  return 1;
+ }
+ void Reset() { sprite=0; width=height=0; loadedRevision=revision-1; }
+ int VidInit() { Reset(); return 1; }
+ int Draw(float)
+ {
+  if(items.empty() || gEngfuncs.IsSpectateOnly()
+    || !(gHUD.m_iWeaponBits & (1u<<WEAPON_SUIT))) return 1;
+  if(loadedRevision!=revision) {
+   loadedRevision=revision;
+   sprite=0;
+   int index=gHUD.GetSpriteIndex("item_inventory");
+   if(index>=0) {
+    sprite=gHUD.GetSprite(index);
+    rectangle=gHUD.GetSpriteRect(index);
+    width=rectangle.right-rectangle.left;
+    height=rectangle.bottom-rectangle.top;
+   }
+   std::string icon=SvenUI::InventoryHudIcon(items);
+   if(!icon.empty()) {
+    if(icon.find(".spr")!=std::string::npos) {
+     if(icon.compare(0,8,"sprites/")) icon="sprites/"+icon;
+     HSPRITE custom=gEngfuncs.pfnSPR_Load(icon.c_str());
+     if(custom>0) {
+      sprite=custom;
+      rectangle.left=rectangle.top=0;
+      rectangle.right=SPR_Width(custom,0);
+      rectangle.bottom=SPR_Height(custom,0);
+      if(width<=0 || height<=0) { width=rectangle.right; height=rectangle.bottom; }
+     }
+    } else {
+     int custom=gHUD.GetSpriteIndex(icon.c_str());
+     if(custom>=0) {
+      sprite=gHUD.GetSprite(custom); rectangle=gHUD.GetSpriteRect(custom);
+      if(width<=0 || height<=0) { width=rectangle.right-rectangle.left; height=rectangle.bottom-rectangle.top; }
+     }
+    }
+   }
+  }
+  if(sprite<=0 || width<=0 || height<=0) return 1;
+  int flash=gHUD.GetSpriteIndex("flash_empty");
+  int flashHeight=flash<0?height:gHUD.GetSpriteRect(flash).bottom-gHUD.GetSpriteRect(flash).top;
+  int xpos=ScreenWidth-width-8;
+  int ypos=flashHeight+flashHeight/2+8;
+  int red=100, green=130, blue=200;
+  float alpha=CVAR_GET_FLOAT("hud_alpha_default");
+  ScaleColors(red,green,blue,(int)std::max(0.0f,std::min(255.0f,alpha)));
+  if(gEngfuncs.pfnSPR_DrawGeneric) {
+   gEngfuncs.pfnSPR_Set(sprite,red,green,blue);
+   gEngfuncs.pfnSPR_DrawGeneric(0,xpos,ypos,&rectangle,0x0302,1,width,height);
+  } else gHUD.DrawSprite(xpos,ypos,sprite,&rectangle,red,green,blue,0,SPR_ADDITIVE);
+  if(items.size()>1)
+   gHUD.DrawHudNumberString(ScreenWidth-4,ypos+height,0,(int)std::min((size_t)99,items.size()),red,green,blue);
+  return 1;
+ }
+};
+static SvenInventoryHud inventoryHud;
 static int cameraSprite;
 static bool keyboard;
 static bool uiCaptured;
@@ -552,6 +621,7 @@ static void OpenMedia() {
 }
 void SvenUI_Init()
 {
+ inventoryHud.Init();
  gEngfuncs.pfnRegisterVariable("cl_sven_camera_mouse","0",0);
  gEngfuncs.pfnRegisterVariable("cl_sven_ui_capture","0",0);
  gEngfuncs.pfnHookUserMsg("CameraMouse",CameraMessage);

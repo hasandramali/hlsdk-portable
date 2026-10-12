@@ -64,6 +64,14 @@ inline void RemoveItems(std::vector<Item> &items,int32_t id,bool keepPersistent)
   else ++i;
  }
 }
+inline std::string InventoryHudIcon(const std::vector<Item> &items)
+{
+ if(items.empty()) return std::string();
+ const std::string &icon=items.front().extra;
+ for(size_t index=1;index<items.size();++index)
+  if(items[index].extra!=icon) return std::string();
+ return icon;
+}
 struct Vote { unsigned duration; std::string title, yes, no; };
 inline bool ReadVote(const void *data,int size,Vote &out)
 {
