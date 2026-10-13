@@ -36,6 +36,7 @@ int CHudMessage::Init( void )
 {
 	HOOK_MESSAGE( HudText );
 	HOOK_MESSAGE( GameTitle );
+	m_iFlags |= HUD_INTERMISSION;
 
 	gHUD.AddHudElem( this );
 
