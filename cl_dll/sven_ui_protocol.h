@@ -6,6 +6,7 @@
 #include <string>
 #include <vector>
 #include <algorithm>
+#include <cmath>
 
 namespace SvenUI
 {
@@ -49,6 +50,38 @@ struct Item
  float weight;
  std::string name, title, description, icon, extra;
 };
+struct NumberDisplay
+{
+ unsigned channel, flags, digits, maxdigits, mode;
+ float value, x, y, fadein, fadeout, hold, effect;
+ unsigned char colors[2][4];
+ std::string sprite;
+ int left, top, width, height;
+};
+inline bool ReadNumberDisplay(const void *data,int size,NumberDisplay &out)
+{
+ Reader reader(data,size); NumberDisplay next;
+ next.channel=reader.byte(); next.flags=(uint32_t)reader.integer(); next.value=reader.real();
+ next.digits=reader.byte(); next.maxdigits=reader.byte(); next.x=reader.real(); next.y=reader.real();
+ for(unsigned color=0;color<2;++color)
+  for(unsigned component=0;component<4;++component) next.colors[color][component]=reader.byte();
+ next.sprite=reader.string(); next.left=reader.byte(); next.top=reader.byte();
+ next.width=reader.shortInt(); next.height=reader.shortInt();
+ next.fadein=reader.real(); next.fadeout=reader.real(); next.hold=reader.real(); next.effect=reader.real(); next.mode=reader.byte();
+ if(!reader.done() || next.channel>=32 || next.maxdigits>32 || next.digits>32
+   || next.width<0 || next.height<0 || !std::isfinite(next.value)
+   || next.value<-2147483648.0 || next.value>2147483647.0
+   || !std::isfinite(next.x) || !std::isfinite(next.y) || !std::isfinite(next.fadein)
+   || !std::isfinite(next.fadeout) || !std::isfinite(next.hold) || !std::isfinite(next.effect)) return false;
+ out=next; return true;
+}
+inline int NumberPosition(float value,int screen,int extent,bool pixels,bool center)
+{
+ double position=center?(screen-extent)*0.5:0;
+ if(pixels) position+=value<0&&!center?screen-extent+value:value;
+ else position+=value<0&&!center?(value+1)*screen-extent:value*screen;
+ return (int)std::max(0.0,std::min((double)std::max(0,screen-extent),position));
+}
 inline bool ReadItem(const void *data,int size,Item &out)
 {
  Reader r(data,size); Item i;

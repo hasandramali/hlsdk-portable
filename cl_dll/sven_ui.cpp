@@ -90,6 +90,85 @@ public:
  }
 };
 static SvenInventoryHud inventoryHud;
+class SvenNumberHud : public CHudBase
+{
+ struct Channel { SvenUI::NumberDisplay data; float start; HSPRITE sprite; wrect_t rect; };
+ std::map<unsigned,Channel> channels;
+public:
+ int Init() { m_iFlags=HUD_ACTIVE; gHUD.AddHudElem(this); return 1; }
+ void Reset() { channels.clear(); }
+ int VidInit() { for(auto &entry:channels) entry.second.sprite=0; return 1; }
+ int Message(int size,void *buffer)
+ {
+  SvenUI::NumberDisplay data;
+  if(!SvenUI::ReadNumberDisplay(buffer,size,data)) return 0;
+  Channel channel={}; channel.data=data; channel.start=gEngfuncs.GetClientTime();
+  channels[data.channel]=channel; return 1;
+ }
+ int Update(int size,void *buffer)
+ {
+  SvenUI::Reader reader(buffer,size); unsigned channel=reader.byte(); float value=reader.real();
+  if(!reader.done() || channel>=32 || !std::isfinite(value) || value<-2147483648.0 || value>2147483647.0) return 0;
+  auto found=channels.find(channel);
+  if(found!=channels.end()) found->second.data.value=value;
+  return 1;
+ }
+ int Draw(float time)
+ {
+  for(auto &entry:channels) {
+   Channel &channel=entry.second; const SvenUI::NumberDisplay &data=channel.data;
+   float elapsed=std::max(0.0f,time-channel.start);
+   if(data.hold>=0 && elapsed>data.fadein+data.hold+data.fadeout) continue;
+   if((data.flags&0x40000) && data.value==0) continue;
+   if(!channel.sprite && !data.sprite.empty()) {
+    std::string path=data.sprite;
+    if(path.compare(0,8,"sprites/")) path="sprites/"+path;
+    if(path.size()<4 || path.substr(path.size()-4)!=".spr") path+=".spr";
+    channel.sprite=gEngfuncs.pfnSPR_Load(path.c_str());
+    channel.rect.left=data.left; channel.rect.top=data.top;
+    channel.rect.right=data.left+(data.width?data.width:channel.sprite>0?SPR_Width(channel.sprite,0):0);
+    channel.rect.bottom=data.top+(data.height?data.height:channel.sprite>0?SPR_Height(channel.sprite,0):0);
+   }
+   char value[48]; int number=(int)data.value;
+   snprintf(value,sizeof(value),"%d",number<0 && !(data.flags&0x100000)?0:number);
+   std::string text=value;
+   if(number>=0 && (data.flags&0x200000)) text="+"+text;
+   while(text.size()<data.digits) text=(data.flags&0x80000?"0":" ")+text;
+   if(data.maxdigits && text.size()>data.maxdigits) text=text.substr(text.size()-data.maxdigits);
+   int font=gHUD.GetSpriteIndex("number_0");
+   if(font<0) continue;
+   wrect_t digitRect=gHUD.GetSpriteRect(font);
+   int digitWidth=digitRect.right-digitRect.left, digitHeight=digitRect.bottom-digitRect.top;
+   int iconWidth=channel.sprite>0?channel.rect.right-channel.rect.left:0;
+   int iconHeight=channel.sprite>0?channel.rect.bottom-channel.rect.top:0;
+   int totalWidth=digitWidth*text.size()+(iconWidth?iconWidth+4:0);
+   int totalHeight=std::max(digitHeight,iconHeight);
+   int xpos=SvenUI::NumberPosition(data.x,ScreenWidth,totalWidth,data.flags&1,data.flags&4);
+   int ypos=SvenUI::NumberPosition(data.y,ScreenHeight,totalHeight,data.flags&2,data.flags&8);
+   float alpha=data.colors[0][3]/255.0f;
+   if(data.flags&0x80) alpha*=std::max(0.0f,std::min(255.0f,CVAR_GET_FLOAT("hud_alpha_default")))/255;
+   if(data.fadein>0 && elapsed<data.fadein) alpha*=elapsed/data.fadein;
+   if(data.hold>=0 && data.fadeout>0 && elapsed>data.fadein+data.hold) alpha*=std::max(0.0f,1-(elapsed-data.fadein-data.hold)/data.fadeout);
+   int red=data.colors[0][0]*alpha, green=data.colors[0][1]*alpha, blue=data.colors[0][2]*alpha;
+   if(iconWidth && !(data.flags&0x10000)) {
+    gHUD.DrawSprite(xpos,ypos+(totalHeight-iconHeight)/2,channel.sprite,&channel.rect,red,green,blue,0,SPR_ADDITIVE);
+    xpos+=iconWidth+4;
+   }
+   for(char character:text) {
+    int index=character>='0'&&character<='9'?font+character-'0':
+      character=='-'?gHUD.GetSpriteIndex("minus"):character=='+'?gHUD.GetSpriteIndex("plus"):-1;
+    if(index>=0) gHUD.DrawSprite(xpos,ypos+(totalHeight-digitHeight)/2,gHUD.GetSprite(index),&gHUD.GetSpriteRect(index),red,green,blue,0,SPR_ADDITIVE);
+    xpos+=digitWidth;
+   }
+   if(iconWidth && (data.flags&0x10000))
+    gHUD.DrawSprite(xpos+4,ypos+(totalHeight-iconHeight)/2,channel.sprite,&channel.rect,red,green,blue,0,SPR_ADDITIVE);
+  }
+  return 1;
+ }
+};
+static SvenNumberHud numberHud;
+static int NumberMessage(const char *,int size,void *buffer) { return numberHud.Message(size,buffer); }
+static int NumberUpdate(const char *,int size,void *buffer) { return numberHud.Update(size,buffer); }
 static int cameraSprite;
 static bool keyboard;
 static bool uiCaptured;
@@ -622,6 +701,9 @@ static void OpenMedia() {
 void SvenUI_Init()
 {
  inventoryHud.Init();
+ numberHud.Init();
+ gEngfuncs.pfnHookUserMsg("NumDisplay",NumberMessage);
+ gEngfuncs.pfnHookUserMsg("UpdateNum",NumberUpdate);
  gEngfuncs.pfnRegisterVariable("cl_sven_camera_mouse","0",0);
  gEngfuncs.pfnRegisterVariable("cl_sven_ui_capture","0",0);
  gEngfuncs.pfnHookUserMsg("CameraMouse",CameraMessage);
