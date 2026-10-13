@@ -510,10 +510,22 @@ class PojavBitmap: public vgui::Bitmap
 public:
  PojavBitmap() { setSize(36,54); for(int y=0;y<54;++y) for(int x=0;x<36;++x) { unsigned p=(y*36+x)*2; setRGBA(x,y,pojavCursor[p],pojavCursor[p],pojavCursor[p],pojavCursor[p+1]); } }
 };
+static int CameraWidth()
+{
+ int width=gEngfuncs.pfnGetCvarFloat ? (int)gEngfuncs.pfnGetCvarFloat("vid_width") : 0;
+ vgui::Panel *root=gEngfuncs.VGui_GetPanel ? (vgui::Panel *)gEngfuncs.VGui_GetPanel() : NULL;
+ return width>0 ? width : root ? root->getWide() : ScreenWidth;
+}
+static int CameraHeight()
+{
+ int height=gEngfuncs.pfnGetCvarFloat ? (int)gEngfuncs.pfnGetCvarFloat("vid_height") : 0;
+ vgui::Panel *root=gEngfuncs.VGui_GetPanel ? (vgui::Panel *)gEngfuncs.VGui_GetPanel() : NULL;
+ return height>0 ? height : root ? root->getTall() : ScreenHeight;
+}
 class CameraInput: public vgui::InputSignal
 {
 public:
- void cursorMoved(int x,int y,vgui::Panel *) { if(dragFinger<0 && fingers[0]<0 && fingers[1]<0 && fingers[2]<0 && fingers[3]<0) Motion((float)x/ScreenWidth,(float)y/ScreenHeight); }
+ void cursorMoved(int x,int y,vgui::Panel *) { if(dragFinger<0 && fingers[0]<0 && fingers[1]<0 && fingers[2]<0 && fingers[3]<0) Motion((float)x/CameraWidth(),(float)y/CameraHeight()); }
  void cursorEntered(vgui::Panel *) {}
  void cursorExited(vgui::Panel *) {}
  void mousePressed(vgui::MouseCode c,vgui::Panel *) { MouseButton(c,true); }
@@ -529,8 +541,8 @@ class CameraPanel: public CMenuPanel
 {
  PojavBitmap cursor;
 public:
- CameraPanel(): CMenuPanel(255,0,0,0,ScreenWidth,ScreenHeight) { addInputSignal(new CameraInput); }
- void Open() { CMenuPanel::Open(); requestFocus(); }
+ CameraPanel(): CMenuPanel(255,0,0,0,CameraWidth(),CameraHeight()) { addInputSignal(new CameraInput); }
+ void Open() { setSize(CameraWidth(),CameraHeight()); CMenuPanel::Open(); requestFocus(); }
  void Close() { if(camera.active) { SvenUI_ExitCamera(); return; } CMenuPanel::Close(); }
  void paintBackground()
  {
@@ -540,9 +552,9 @@ public:
     gEngfuncs.pTriAPI->RenderMode(kRenderTransTexture); gEngfuncs.pTriAPI->Color4f(1,1,1,1);
     gEngfuncs.pTriAPI->Begin(TRI_QUADS);
     gEngfuncs.pTriAPI->TexCoord2f(0,0); gEngfuncs.pTriAPI->Vertex3f(0,0,0);
-    gEngfuncs.pTriAPI->TexCoord2f(1,0); gEngfuncs.pTriAPI->Vertex3f(ScreenWidth,0,0);
-    gEngfuncs.pTriAPI->TexCoord2f(1,1); gEngfuncs.pTriAPI->Vertex3f(ScreenWidth,ScreenHeight,0);
-    gEngfuncs.pTriAPI->TexCoord2f(0,1); gEngfuncs.pTriAPI->Vertex3f(0,ScreenHeight,0);
+    gEngfuncs.pTriAPI->TexCoord2f(1,0); gEngfuncs.pTriAPI->Vertex3f(CameraWidth(),0,0);
+    gEngfuncs.pTriAPI->TexCoord2f(1,1); gEngfuncs.pTriAPI->Vertex3f(CameraWidth(),CameraHeight(),0);
+    gEngfuncs.pTriAPI->TexCoord2f(0,1); gEngfuncs.pTriAPI->Vertex3f(0,CameraHeight(),0);
     gEngfuncs.pTriAPI->End(); gEngfuncs.pTriAPI->RenderMode(kRenderNormal);
    }
   }
@@ -552,15 +564,15 @@ public:
   if(gMobileEngfuncs) {
    DrawControl("MOUSE1",0); DrawControl("MOUSE2",1); DrawControl(keyboard?"KEYBOARD ON":"KEYBOARD",2); DrawControl(camera.exiting?"EXIT ...":"EXIT",3);
   }
-  cursor.setPos(camera.x*ScreenWidth,camera.y*ScreenHeight); cursor.doPaint(this);
+  cursor.setPos(camera.x*CameraWidth(),camera.y*CameraHeight()); cursor.doPaint(this);
  }
  static void Bounds(int i,int &x,int &y,int &w,int &h)
  {
   // controls.json (scale 130): preserve corner anchors and square mouse buttons.
-  float scale=ScreenHeight/480.f;
-  if(i<2) { w=h=145.45454f*scale; x=i*(w+4*scale); y=.00589054f*ScreenHeight; }
-  else if(i==2) { w=104*scale; h=39*scale; x=.98970854f*ScreenWidth-w; y=.01509316f*ScreenHeight; }
-  else { w=h=65*scale; x=.9760203f*ScreenWidth-w; y=ScreenHeight-h; }
+  float scale=CameraHeight()/480.f;
+  if(i<2) { w=h=145.45454f*scale; x=i*(w+4*scale); y=.00589054f*CameraHeight(); }
+  else if(i==2) { w=104*scale; h=39*scale; x=.98970854f*CameraWidth()-w; y=.01509316f*CameraHeight(); }
+  else { w=h=65*scale; x=.9760203f*CameraWidth()-w; y=CameraHeight()-h; }
  }
  void DrawControl(const char *s,int i)
  {
@@ -769,7 +781,7 @@ extern "C" int DLLEXPORT IN_ClientTouchEvent(int type,int finger,float x,float y
  if(type==0) { // event_down
   int hit=-1;
   for(int i=0;i<4;++i) { int bx,by,bw,bh; CameraPanel::Bounds(i,bx,by,bw,bh);
-   if(x*ScreenWidth>=bx && x*ScreenWidth<bx+bw && y*ScreenHeight>=by && y*ScreenHeight<by+bh) {hit=i;break;}
+   if(x*CameraWidth()>=bx && x*CameraWidth()<bx+bw && y*CameraHeight()>=by && y*CameraHeight()<by+bh) {hit=i;break;}
   }
   if(hit<0 && dragFinger<0) dragFinger=finger;
   if(hit>=0 && fingers[hit]<0) {
@@ -891,7 +903,7 @@ int CHudEsfCrosshair::Draw( float flTime )
 #define TOUCH_ORBIT_ACCEL 400.0f
 #define TOUCH_ORBIT_GAIN_MAX 5.0f
 #define TOUCH_ORBIT_DOUBLE_TAP 0.9f
-#define TOUCH_ORBIT_LOCK_OFFSET -24.0f
+#define TOUCH_ORBIT_LOCK_OFFSET -20.0f
 
 int CHudTouchOrbit::Init( void )
 {
@@ -982,7 +994,7 @@ int CHudTouchOrbit::Event( int type, int finger, float x, float y, float dx, flo
 			float newDX = m_lookX[0] - m_lookX[1];
 			float newDY = m_lookY[0] - m_lookY[1];
 			float newDistance = sqrtf( newDX * newDX + newDY * newDY );
-			float distance = gEngfuncs.pfnGetCvarFloat( "cam_idealdist" ) + ( newDistance - oldDistance ) * 300.0f;
+			float distance = gEngfuncs.pfnGetCvarFloat( "cam_idealdist" ) - ( newDistance - oldDistance ) * 300.0f;
 			gEngfuncs.Cvar_SetValue( "cam_idealdist", Q_max( -150.0f, Q_min( 150.0f, distance ) ) );
 		}
 		else
@@ -1293,7 +1305,7 @@ void SvenUI_Shutdown()
 void SvenUI_VidInit()
 {
 #if USE_VGUI
- if(cameraPanel) cameraPanel->setSize(ScreenWidth,ScreenHeight);
+ if(cameraPanel) cameraPanel->setSize(CameraWidth(),CameraHeight());
  if(camera.active && gViewPort) { gViewPort->ShowVGUIMenu(25); SvenUI_RefreshCursor(); }
 #endif
 }
