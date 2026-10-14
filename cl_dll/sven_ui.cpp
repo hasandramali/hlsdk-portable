@@ -902,8 +902,8 @@ int CHudEsfCrosshair::Draw( float flTime )
 #define TOUCH_ORBIT_GAIN 2.0f
 #define TOUCH_ORBIT_ACCEL 400.0f
 #define TOUCH_ORBIT_GAIN_MAX 5.0f
-#define TOUCH_ORBIT_DOUBLE_TAP 0.9f
-#define TOUCH_ORBIT_LOCK_OFFSET -20.0f
+#define TOUCH_ORBIT_DOUBLE_TAP 0.8f
+#define TOUCH_ORBIT_LOCK_OFFSET -17.0f
 
 int CHudTouchOrbit::Init( void )
 {
