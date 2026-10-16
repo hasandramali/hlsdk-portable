@@ -39,22 +39,6 @@ WEAPON *gpLastSel;		// Last weapon menu selection
 
 client_sprite_t *GetSpriteList(client_sprite_t *pList, const char *psz, int iRes, int iCount);
 
-static bool SpriteNameHasScope( const char *name )
-{
-	for( const char *current = name; current && *current; current++ )
-	{
-		if( strlen( current ) < 5 )
-			break;
-		if( ( current[0] == 's' || current[0] == 'S' ) &&
-			( current[1] == 'c' || current[1] == 'C' ) &&
-			( current[2] == 'o' || current[2] == 'O' ) &&
-			( current[3] == 'p' || current[3] == 'P' ) &&
-			( current[4] == 'e' || current[4] == 'E' ) )
-			return true;
-	}
-	return false;
-}
-
 static HSPRITE LoadWeaponSprite( const char *spriteDir, const char *spriteName )
 {
 	char path[512];
@@ -141,7 +125,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 {
 	int i, iRes;
 
-	iRes = GetSpriteRes( ScreenWidth, ScreenHeight );
+	iRes = 640;
 
 	char sz[256];
 
@@ -169,27 +153,19 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	pWeapon->hZoomedAutoaim = 0;
 	pWeapon->hScopeOverlay = 0;
 
-	// Stock client.dll LoadWeaponSprites (0x10003d10): when the CustWeapon
-	// subdirectory is present it loads "sprites/<subdir>/<weapon>.txt",
-	// otherwise the plain "sprites/<weapon>.txt". Custom map weapons (e.g.
-	// They Hunger: subdir "hunger/weapons") only exist under their subdir.
 	const char *spriteDir = pWeapon->szSpriteDir[0] ? pWeapon->szSpriteDir :
 		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szCustSprDir[pWeapon->iId] : "" );
+	const char *spriteRecord = pWeapon->szSpriteRecord[0] ? pWeapon->szSpriteRecord :
+		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szWeaponSpr[pWeapon->iId] : "" );
+	const char *spriteList = spriteRecord[0] ? spriteRecord : pWeapon->szName;
 	if( spriteDir[0] )
-		snprintf( sz, sizeof( sz ), "sprites/%s/%s.txt", spriteDir, pWeapon->szName );
+		snprintf( sz, sizeof( sz ), "sprites/%s/%s.txt", spriteDir, spriteList );
 	else
-		snprintf( sz, sizeof( sz ), "sprites/%s.txt", pWeapon->szName );
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteList );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
 	if( !pList && spriteDir[0] )
 	{
-		snprintf( sz, sizeof( sz ), "sprites/%s.txt", pWeapon->szName );
-		pList = SPR_GetList( sz, &i );
-	}
-	const char *spriteRecord = pWeapon->szSpriteRecord[0] ? pWeapon->szSpriteRecord :
-		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szWeaponSpr[pWeapon->iId] : "" );
-	if( !pList && spriteRecord[0] )
-	{
-		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteRecord );
+		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteList );
 		pList = SPR_GetList( sz, &i );
 	}
 
@@ -217,7 +193,6 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		pWeapon->hAutoaim = 0;
 
 	p = GetSpriteList( pList, "zoom", iRes, i );
-	client_sprite_t *zoomSprite = p;
 	if( p )
 	{
 		pWeapon->hZoomedCrosshair = LoadWeaponSprite( spriteDir, p->szSprite );
@@ -228,32 +203,6 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		pWeapon->hZoomedCrosshair = pWeapon->hCrosshair; //default to non-zoomed crosshair
 		pWeapon->rcZoomedCrosshair = pWeapon->rcCrosshair;
 	}
-	if( p && ( SpriteNameHasScope( p->szName ) || SpriteNameHasScope( p->szSprite ) ) )
-	{
-		pWeapon->hScopeOverlay = pWeapon->hZoomedCrosshair;
-		pWeapon->rcScopeOverlay = p->rc;
-	}
-
-	// Custom weapons may publish a separate scope entry instead of calling it
-	// "zoom". Discover it from the server-provided sprite list, never from a
-	// weapon classname, so newly-added AngelScript weapons work automatically.
-	for( int scopeIndex = 0; scopeIndex < i; scopeIndex++ )
-	{
-		client_sprite_t *scope = &pList[scopeIndex];
-		if( scope != zoomSprite && scope->iRes == iRes &&
-			( SpriteNameHasScope( scope->szName ) || SpriteNameHasScope( scope->szSprite ) ) )
-		{
-			HSPRITE hScope = LoadWeaponSprite( spriteDir, scope->szSprite );
-			if( hScope )
-			{
-				pWeapon->hScopeOverlay = hScope;
-				pWeapon->rcScopeOverlay = scope->rc;
-			}
-			if( hScope )
-				break;
-		}
-	}
-
 	p = GetSpriteList( pList, "zoom_autoaim", iRes, i );
 	if( p )
 	{
@@ -448,6 +397,7 @@ void CHudAmmo::Reset( void )
 	SetCrosshair( 0, nullrc, 0, 0, 0 ); // reset crosshair
 	SetScopeOverlay( 0, nullrc );
 	m_pWeapon = NULL; // reset last weapon
+	m_fOnTarget = false;
 }
 
 int CHudAmmo::VidInit( void )
@@ -903,8 +853,7 @@ int CHudAmmo::MsgFunc_TE_CUSTOM( const char *pszName, int iSize, void *pbuf )
 // Sven per-weapon sprite payload table, indexed by weapon id. WeaponSpr
 // (client.so 0xA328A) writes [SHORT id][STRING] into rgWeapons[id]+0xB0 and
 // reprocesses the weapon record (0xA2522); CustWeapon (+0x1B5) is the
-// separate sprite-subdirectory context. The payload is also used as a
-// fallback sprite-list name when the normal weapon list is unavailable.
+// separate sprite-subdirectory context.
 //
 // WeaponSpr -- Sven weapon sprite payload, svc 138: [SHORT id][STRING].
 //
@@ -1019,6 +968,28 @@ int CHudAmmo::ActiveWeaponId() const
 	return m_pWeapon ? m_pWeapon->iId : 0;
 }
 
+void CHudAmmo::UpdateCrosshair()
+{
+	wrect_t nullrc = {0,};
+	SetScopeOverlay( 0, nullrc );
+	if( !m_pWeapon || ( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) ) )
+	{
+		SetCrosshair( 0, nullrc, 0, 0, 0 );
+		return;
+	}
+	if( gHUD.m_iFOV < 90 )
+	{
+		if( m_fOnTarget && m_pWeapon->hZoomedAutoaim )
+			SetCrosshair( m_pWeapon->hZoomedAutoaim, m_pWeapon->rcZoomedAutoaim, 255, 255, 255 );
+		else
+			SetCrosshair( m_pWeapon->hZoomedCrosshair, m_pWeapon->rcZoomedCrosshair, 255, 255, 255 );
+	}
+	else if( m_fOnTarget && m_pWeapon->hAutoaim )
+		SetCrosshair( m_pWeapon->hAutoaim, m_pWeapon->rcAutoaim, 255, 255, 255 );
+	else
+		SetCrosshair( m_pWeapon->hCrosshair, m_pWeapon->rcCrosshair, 255, 255, 255 );
+}
+
 int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 {
 	wrect_t nullrc = {0,};
@@ -1114,28 +1085,8 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 		return 1;
 
 	m_pWeapon = pWeapon;
-
-	if( !( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) ) )
-	{
-		if( gHUD.m_iFOV >= 90 )
-		{
-			SetScopeOverlay( m_pWeapon->hScopeOverlay, m_pWeapon->rcScopeOverlay );
-			// normal crosshairs
-			if( fOnTarget && m_pWeapon->hAutoaim )
-				SetCrosshair( m_pWeapon->hAutoaim, m_pWeapon->rcAutoaim, 255, 255, 255 );
-			else
-				SetCrosshair( m_pWeapon->hCrosshair, m_pWeapon->rcCrosshair, 255, 255, 255 );
-		}
-		else
-		{
-			// zoomed crosshairs
-			if( fOnTarget && m_pWeapon->hZoomedAutoaim )
-				SetCrosshair( m_pWeapon->hZoomedAutoaim, m_pWeapon->rcZoomedAutoaim, 255, 255, 255 );
-			else
-				SetCrosshair( m_pWeapon->hZoomedCrosshair, m_pWeapon->rcZoomedCrosshair, 255, 255, 255 );
-			SetScopeOverlay( m_pWeapon->hScopeOverlay, m_pWeapon->rcScopeOverlay );
-		}
-	}
+	m_fOnTarget = fOnTarget != FALSE;
+	UpdateCrosshair();
 
 	m_fFade = 200.0f; //!!!
 	m_iFlags |= HUD_ACTIVE;

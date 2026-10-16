@@ -113,6 +113,7 @@ class CHudAmmo : public CHudBase
 {
 public:
 	int ActiveWeaponId() const;
+	void UpdateCrosshair();
 	int Init( void );
 	int VidInit( void );
 	int Draw( float flTime );
@@ -161,6 +162,7 @@ private:
 	float m_fFade;
 	RGBA  m_rgba;
 	WEAPON *m_pWeapon;
+	bool m_fOnTarget;
 	int m_HUD_bucket0;
 	int m_HUD_selection;
 	// Temporary green-highlight weapon ids (menu-open pickups only).

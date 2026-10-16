@@ -58,6 +58,79 @@ struct NumberDisplay
  std::string sprite;
  int left, top, width, height;
 };
+inline bool ValidHudDisplay(const NumberDisplay &data)
+{
+ return data.channel<32 && data.width>=0 && data.height>=0
+  && std::isfinite(data.x) && std::isfinite(data.y) && std::isfinite(data.fadein)
+  && std::isfinite(data.fadeout) && std::isfinite(data.hold) && std::isfinite(data.effect);
+}
+inline void ReadHudColors(Reader &reader,NumberDisplay &data)
+{
+ for(unsigned color=0;color<2;++color)
+  for(unsigned component=0;component<4;++component) data.colors[color][component]=reader.byte();
+}
+inline void ReadHudSprite(Reader &reader,NumberDisplay &data)
+{
+ data.sprite=reader.string(); data.left=reader.byte(); data.top=reader.byte();
+ data.width=reader.shortInt(); data.height=reader.shortInt();
+}
+inline void ReadHudTiming(Reader &reader,NumberDisplay &data)
+{
+ data.fadein=reader.real(); data.fadeout=reader.real(); data.hold=reader.real();
+ data.effect=reader.real(); data.mode=reader.byte();
+}
+struct SpriteDisplay
+{
+ NumberDisplay data;
+ unsigned frame, frames;
+ float framerate;
+};
+inline bool ReadSpriteDisplay(const void *buffer,int size,SpriteDisplay &out)
+{
+ Reader reader(buffer,size); SpriteDisplay next={};
+ next.data.channel=reader.byte(); next.data.flags=(uint32_t)reader.integer();
+ ReadHudSprite(reader,next.data);
+ next.data.x=reader.real(); next.data.y=reader.real(); ReadHudColors(reader,next.data);
+ next.frame=reader.byte(); next.frames=reader.byte(); next.framerate=reader.real();
+ ReadHudTiming(reader,next.data);
+ if(!reader.done() || !ValidHudDisplay(next.data) || !std::isfinite(next.framerate)) return false;
+ out=next; return true;
+}
+struct TimeDisplay
+{
+ NumberDisplay data;
+ float reference;
+};
+inline bool ReadTimeDisplay(const void *buffer,int size,TimeDisplay &out)
+{
+ Reader reader(buffer,size); TimeDisplay next={};
+ next.data.channel=reader.byte(); next.data.flags=(uint32_t)reader.integer();
+ next.reference=reader.real(); next.data.value=reader.real();
+ next.data.x=reader.real(); next.data.y=reader.real(); ReadHudColors(reader,next.data);
+ ReadHudSprite(reader,next.data); ReadHudTiming(reader,next.data);
+ if(!reader.done() || !ValidHudDisplay(next.data) || !std::isfinite(next.reference)
+  || !std::isfinite(next.data.value)) return false;
+ out=next; return true;
+}
+inline std::string FormatHudTime(const NumberDisplay &data,float reference,float time)
+{
+ double value=data.value;
+ if(!(data.flags&0x400000)) value+=((double)time-reference)*(data.flags&0x800000?-1:1);
+ value=std::max(0.0,std::min(2147483647.0,value));
+ unsigned flags=data.flags;
+ if((flags&0xa0000)==0xa0000) flags|=0x40000;
+ if((flags&0x140000)==0x140000) flags|=0x80000;
+ const unsigned units[]={0x20000,0x40000,0x80000,0x100000};
+ const int values[]={(int)(value/3600),(int)(value/60)%60,(int)value%60,(int)std::fmod(value*1000,1000)};
+ std::string text;
+ for(unsigned index=0;index<4;++index) {
+  if(!(flags&units[index])) continue;
+  if(!text.empty()) text+=index==3?'.':':';
+  std::string digits=std::to_string(values[index]);
+  text+=std::string(std::max(0,(index==3?3:2)-(int)digits.size()),'0')+digits;
+ }
+ return text;
+}
 inline bool ReadNumberDisplay(const void *data,int size,NumberDisplay &out)
 {
  Reader reader(data,size); NumberDisplay next;

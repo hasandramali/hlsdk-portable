@@ -92,35 +92,98 @@ public:
 static SvenInventoryHud inventoryHud;
 class SvenNumberHud : public CHudBase
 {
- struct Channel { SvenUI::NumberDisplay data; float start; HSPRITE sprite; wrect_t rect; };
+ enum Kind { Number, Sprite, Timer };
+ struct Channel {
+  SvenUI::NumberDisplay data;
+  float start, reference, framerate;
+  HSPRITE sprite;
+  wrect_t rect;
+  Kind kind;
+  unsigned frame, frames;
+  bool visible, loaded;
+ };
  std::map<unsigned,Channel> channels;
+ static int Glyph(char character,int font)
+ {
+  return character>='0' && character<='9'?font+character-'0':
+   character=='-'?gHUD.GetSpriteIndex("minus"):character=='+'?gHUD.GetSpriteIndex("plus"):
+   character==':'?gHUD.GetSpriteIndex("colon"):character=='.'?gHUD.GetSpriteIndex("dot"):-1;
+ }
+ void Store(Channel &channel)
+ {
+  channel.start=gEngfuncs.GetClientTime(); channel.visible=!(channel.data.flags&0x20);
+  channels[channel.data.channel]=channel;
+ }
 public:
  int Init() { m_iFlags=HUD_ACTIVE; gHUD.AddHudElem(this); return 1; }
- void Reset() { channels.clear(); }
- int VidInit() { for(auto &entry:channels) entry.second.sprite=0; return 1; }
+ void Reset() {}
+ void InitHUDData() { channels.clear(); }
+ int VidInit() { for(auto &entry:channels) { entry.second.sprite=0; entry.second.loaded=false; } return 1; }
  int Message(int size,void *buffer)
  {
   SvenUI::NumberDisplay data;
   if(!SvenUI::ReadNumberDisplay(buffer,size,data)) return 0;
-  Channel channel={}; channel.data=data; channel.start=gEngfuncs.GetClientTime();
-  channels[data.channel]=channel; return 1;
+  Channel channel={}; channel.data=data; channel.kind=Number;
+  Store(channel); return 1;
+ }
+ int SpriteMessage(int size,void *buffer)
+ {
+  SvenUI::SpriteDisplay data;
+  if(!SvenUI::ReadSpriteDisplay(buffer,size,data)) return 0;
+  Channel channel={}; channel.data=data.data; channel.kind=Sprite;
+  channel.frame=data.frame; channel.frames=data.frames; channel.framerate=data.framerate;
+  Store(channel); return 1;
+ }
+ int TimeMessage(int size,void *buffer)
+ {
+  SvenUI::TimeDisplay data;
+  if(!SvenUI::ReadTimeDisplay(buffer,size,data)) return 0;
+  Channel channel={}; channel.data=data.data; channel.kind=Timer; channel.reference=data.reference;
+  Store(channel); return 1;
+ }
+ int Toggle(int size,void *buffer)
+ {
+  SvenUI::Reader reader(buffer,size); unsigned channel=reader.byte(); bool visible=reader.byte()!=0;
+  if(!reader.done() || channel>=32) return 0;
+  auto found=channels.find(channel);
+  if(found!=channels.end()) found->second.visible=visible;
+  return 1;
+ }
+ int TimeUpdate(int size,void *buffer)
+ {
+  SvenUI::Reader reader(buffer,size); unsigned channel=reader.byte(); float reference=reader.real(), value=reader.real();
+  if(!reader.done() || channel>=32 || !std::isfinite(reference) || !std::isfinite(value)) return 0;
+  auto found=channels.find(channel);
+  if(found!=channels.end() && found->second.kind==Timer) {
+   found->second.reference=reference; found->second.data.value=value;
+  }
+  return 1;
  }
  int Update(int size,void *buffer)
  {
   SvenUI::Reader reader(buffer,size); unsigned channel=reader.byte(); float value=reader.real();
   if(!reader.done() || channel>=32 || !std::isfinite(value) || value<-2147483648.0 || value>2147483647.0) return 0;
   auto found=channels.find(channel);
-  if(found!=channels.end()) found->second.data.value=value;
+  if(found!=channels.end() && found->second.kind==Number) found->second.data.value=value;
   return 1;
  }
  int Draw(float time)
  {
   for(auto &entry:channels) {
    Channel &channel=entry.second; const SvenUI::NumberDisplay &data=channel.data;
+   if(!channel.visible) continue;
    float elapsed=std::max(0.0f,time-channel.start);
    if(data.hold>=0 && elapsed>data.fadein+data.hold+data.fadeout) continue;
-   if((data.flags&0x40000) && data.value==0) continue;
-   if(!channel.sprite && !data.sprite.empty()) {
+   if(channel.kind==Number && (data.flags&0x40000) && data.value==0) continue;
+   if(!channel.loaded && !data.sprite.empty()) {
+    channel.loaded=true;
+    int hudSprite=gHUD.GetSpriteIndex(data.sprite.c_str());
+    if(hudSprite>=0) {
+     channel.sprite=gHUD.GetSprite(hudSprite); channel.rect=gHUD.GetSpriteRect(hudSprite);
+     channel.rect.left+=data.left; channel.rect.top+=data.top;
+     if(data.width) channel.rect.right=channel.rect.left+data.width;
+     if(data.height) channel.rect.bottom=channel.rect.top+data.height;
+    } else {
     std::string path=data.sprite;
     if(path.compare(0,8,"sprites/")) path="sprites/"+path;
     if(path.size()<4 || path.substr(path.size()-4)!=".spr") path+=".spr";
@@ -128,21 +191,30 @@ public:
     channel.rect.left=data.left; channel.rect.top=data.top;
     channel.rect.right=data.left+(data.width?data.width:channel.sprite>0?SPR_Width(channel.sprite,0):0);
     channel.rect.bottom=data.top+(data.height?data.height:channel.sprite>0?SPR_Height(channel.sprite,0):0);
+    }
    }
-   char value[48]; int number=(int)data.value;
+   char value[48]; int number=channel.kind==Number?(int)data.value:0;
    snprintf(value,sizeof(value),"%d",number<0 && !(data.flags&0x100000)?0:number);
-   std::string text=value;
-   if(number>=0 && (data.flags&0x200000)) text="+"+text;
-   while(text.size()<data.digits) text=(data.flags&0x80000?"0":" ")+text;
-   if(data.maxdigits && text.size()>data.maxdigits) text=text.substr(text.size()-data.maxdigits);
+   std::string text;
+   if(channel.kind==Timer) text=SvenUI::FormatHudTime(data,channel.reference,time);
+   else if(channel.kind==Number) {
+    text=value;
+    if(number>=0 && (data.flags&0x200000)) text="+"+text;
+    while(text.size()<data.digits) text=(data.flags&0x80000?"0":" ")+text;
+    if(data.maxdigits && text.size()>data.maxdigits) text=text.substr(text.size()-data.maxdigits);
+   }
    int font=gHUD.GetSpriteIndex("number_0");
-   if(font<0) continue;
-   wrect_t digitRect=gHUD.GetSpriteRect(font);
+   if(font<0 && channel.kind!=Sprite) continue;
+   wrect_t digitRect={}; if(font>=0) digitRect=gHUD.GetSpriteRect(font);
    int digitWidth=digitRect.right-digitRect.left, digitHeight=digitRect.bottom-digitRect.top;
    int iconWidth=channel.sprite>0?channel.rect.right-channel.rect.left:0;
    int iconHeight=channel.sprite>0?channel.rect.bottom-channel.rect.top:0;
-   int totalWidth=digitWidth*text.size()+(iconWidth?iconWidth+4:0);
-   int totalHeight=std::max(digitHeight,iconHeight);
+   int totalWidth=iconWidth?iconWidth+(text.empty()?0:4):0;
+   for(char character:text) {
+    int index=Glyph(character,font);
+    totalWidth+=index>=0?gHUD.GetSpriteRect(index).right-gHUD.GetSpriteRect(index).left:digitWidth;
+   }
+   int totalHeight=channel.kind==Sprite?iconHeight:std::max(digitHeight,iconHeight);
    int xpos=SvenUI::NumberPosition(data.x,ScreenWidth,totalWidth,data.flags&1,data.flags&4);
    int ypos=SvenUI::NumberPosition(data.y,ScreenHeight,totalHeight,data.flags&2,data.flags&8);
    float alpha=data.colors[0][3]/255.0f;
@@ -150,15 +222,23 @@ public:
    if(data.fadein>0 && elapsed<data.fadein) alpha*=elapsed/data.fadein;
    if(data.hold>=0 && data.fadeout>0 && elapsed>data.fadein+data.hold) alpha*=std::max(0.0f,1-(elapsed-data.fadein-data.hold)/data.fadeout);
    int red=data.colors[0][0]*alpha, green=data.colors[0][1]*alpha, blue=data.colors[0][2]*alpha;
+   if(channel.kind==Sprite) {
+    if(iconWidth<=0 || iconHeight<=0) continue;
+    int frame=channel.frame;
+    if(channel.frames>1 && channel.framerate>0)
+     frame+=(int)std::fmod(std::floor((double)elapsed*channel.framerate),channel.frames);
+    SPR_MODE mode=data.flags&0x10000?SPR_TRANSPARENT:data.flags&0x20000?SPR_NORMAL:SPR_ADDITIVE;
+    gHUD.DrawSprite(xpos,ypos,channel.sprite,&channel.rect,red,green,blue,frame,mode);
+    continue;
+   }
    if(iconWidth && !(data.flags&0x10000)) {
     gHUD.DrawSprite(xpos,ypos+(totalHeight-iconHeight)/2,channel.sprite,&channel.rect,red,green,blue,0,SPR_ADDITIVE);
     xpos+=iconWidth+4;
    }
    for(char character:text) {
-    int index=character>='0'&&character<='9'?font+character-'0':
-      character=='-'?gHUD.GetSpriteIndex("minus"):character=='+'?gHUD.GetSpriteIndex("plus"):-1;
+    int index=Glyph(character,font);
     if(index>=0) gHUD.DrawSprite(xpos,ypos+(totalHeight-digitHeight)/2,gHUD.GetSprite(index),&gHUD.GetSpriteRect(index),red,green,blue,0,SPR_ADDITIVE);
-    xpos+=digitWidth;
+    xpos+=index>=0?gHUD.GetSpriteRect(index).right-gHUD.GetSpriteRect(index).left:digitWidth;
    }
    if(iconWidth && (data.flags&0x10000))
     gHUD.DrawSprite(xpos+4,ypos+(totalHeight-iconHeight)/2,channel.sprite,&channel.rect,red,green,blue,0,SPR_ADDITIVE);
@@ -169,6 +249,10 @@ public:
 static SvenNumberHud numberHud;
 static int NumberMessage(const char *,int size,void *buffer) { return numberHud.Message(size,buffer); }
 static int NumberUpdate(const char *,int size,void *buffer) { return numberHud.Update(size,buffer); }
+static int SpriteMessage(const char *,int size,void *buffer) { return numberHud.SpriteMessage(size,buffer); }
+static int TimeMessage(const char *,int size,void *buffer) { return numberHud.TimeMessage(size,buffer); }
+static int TimeUpdate(const char *,int size,void *buffer) { return numberHud.TimeUpdate(size,buffer); }
+static int ToggleElement(const char *,int size,void *buffer) { return numberHud.Toggle(size,buffer); }
 static int cameraSprite;
 static bool keyboard;
 static bool uiCaptured;
@@ -716,6 +800,10 @@ void SvenUI_Init()
  numberHud.Init();
  gEngfuncs.pfnHookUserMsg("NumDisplay",NumberMessage);
  gEngfuncs.pfnHookUserMsg("UpdateNum",NumberUpdate);
+ gEngfuncs.pfnHookUserMsg("CustSpr",SpriteMessage);
+ gEngfuncs.pfnHookUserMsg("TimeDisplay",TimeMessage);
+ gEngfuncs.pfnHookUserMsg("UpdateTime",TimeUpdate);
+ gEngfuncs.pfnHookUserMsg("ToggleElem",ToggleElement);
  gEngfuncs.pfnRegisterVariable("cl_sven_camera_mouse","0",0);
  gEngfuncs.pfnRegisterVariable("cl_sven_ui_capture","0",0);
  gEngfuncs.pfnHookUserMsg("CameraMouse",CameraMessage);
@@ -834,6 +922,7 @@ int CHudEsfCrosshair::VidInit( void )
 int CHudEsfCrosshair::Draw( float flTime )
 {
  (void)flTime;
+	gHUD.m_Ammo.UpdateCrosshair();
 	if( !m_hsprCrosshair && !m_hsprScopeOverlay )
 		return 0;
  if( gHUD.m_fPlayerDead || g_iUser1 )
