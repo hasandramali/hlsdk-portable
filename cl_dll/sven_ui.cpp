@@ -15,6 +15,7 @@
 #include <stdio.h>
 
 static SvenUI::Camera camera;
+static bool cameraSuspended;
 static std::vector<SvenUI::Item> items;
 static std::vector<std::string> maps;
 static SvenUI::Vote vote;
@@ -309,6 +310,7 @@ static int Playlist(const char *,int size,void *data)
 }
 
 bool SvenUI_CameraActive() { return camera.active; }
+bool SvenUI_CameraInputActive() { return camera.active && !cameraSuspended; }
 bool SvenUI_Capturing() { return camera.active || uiCaptured; }
 void SvenUI_Capture(bool enabled)
 {
@@ -316,12 +318,12 @@ void SvenUI_Capture(bool enabled)
  uiCaptured=enabled;
  gEngfuncs.Cvar_SetValue("cl_sven_ui_capture",enabled?1:0);
  if(enabled) gEngfuncs.pfnClientCmd("-forward;-back;-moveleft;-moveright;-left;-right;-lookup;-lookdown;-attack;-attack2;-jump;-duck;-use;-speed;-strafe;-klook\n");
- if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(enabled || camera.active);
+ if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(enabled || SvenUI_CameraInputActive());
 }
 static void Server(const char *command) { gEngfuncs.pfnServerCmd((char *)command); }
 static void Mouse(int button,int action)
 {
- if(!camera.active) return;
+ if(!SvenUI_CameraInputActive()) return;
  float screen[3],world[3]; camera.screen(screen);
  gEngfuncs.pTriAPI->ScreenToWorld(screen,world);
  char command[256];
@@ -330,23 +332,40 @@ static void Mouse(int button,int action)
 }
 static void MouseButton(int button,bool down)
 {
+ if(cameraSuspended && down) return;
  if(button<0 || button>2 || camera.buttons[button]==down) return;
  camera.buttons[button]=down; Mouse(button,down?1:0);
 }
 static void CameraKey(int key,bool down)
 {
+ if(cameraSuspended && down) return;
  if(!camera.active || key<0 || key>=103 || camera.keys[key]==down) return;
  camera.keys[key]=down;
  char command[48]; snprintf(command,sizeof(command),"cam_key %d %d",down?1:0,key); Server(command);
 }
 static void Motion(float x,float y)
 {
+ if(!SvenUI_CameraInputActive()) return;
  camera.move(x-camera.x,y-camera.y);
  float now=gEngfuncs.GetClientTime();
  if(now<camera.nextMotion && camera.nextMotion-now<1) return;
  int button=0; while(button<3 && !camera.buttons[button]) ++button;
  Mouse(button==3?0:button,button==3?4:3);
  camera.nextMotion=now+.05f; // Native client rate: 20 Hz, clicks are never throttled.
+}
+void SvenUI_SuspendCamera(bool suspended)
+{
+ suspended=suspended && camera.active;
+ if(cameraSuspended==suspended) return;
+ if(suspended) {
+  for(int i=0;i<3;++i) MouseButton(i,false);
+  for(int i=0;i<103;++i) CameraKey(i,false);
+  SvenUI_CloseKeyboard();
+  dragFinger=-1; for(int i=0;i<4;++i) fingers[i]=-1;
+ }
+ cameraSuspended=suspended;
+ gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",SvenUI_CameraInputActive()?1:0);
+ if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(uiCaptured || SvenUI_CameraInputActive());
 }
 // Find real map exit buttons, rather than pretending that closing VGUI exits
 // trigger_camera. stadium4 uses func_button -> multi_manager -> exitcamera.
@@ -668,7 +687,7 @@ public:
 };
 void SvenUI_RefreshCursor()
 {
- if(!camera.active) return;
+ if(!SvenUI_CameraInputActive()) return;
  CurrentMouseInput()->IN_SetVisibleMouse(true);
  // Keep VGUI input active while rendering the reference cursor ourselves.
  static vgui::Cursor *invisible;
@@ -704,7 +723,7 @@ static int CameraMessage(const char *,int size,void *data)
 #if USE_VGUI
  if(!gViewPort) return 0;
  if(!mode) {
-  camera=SvenUI::Camera(); cameraSprite=0;
+  camera=SvenUI::Camera(); cameraSuspended=false; cameraSprite=0;
   SvenUI_CloseKeyboard(); dragFinger=-1; for(int i=0;i<4;++i) fingers[i]=-1;
   gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",0);
   if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(false);
@@ -717,9 +736,8 @@ static int CameraMessage(const char *,int size,void *data)
   }
   camera.exiting=false;
   cameraSprite=sprite.empty()?0:gEngfuncs.pfnSPR_Load(sprite.c_str());
-  gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",1);
-  if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(true);
-  gViewPort->ShowVGUIMenu(25); SvenUI_RefreshCursor();
+  gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",SvenUI_CameraInputActive()?1:0);
+  gViewPort->ShowVGUIMenu(25); gViewPort->UpdateCursorState();
  }
 #endif
  return 1;
@@ -760,12 +778,12 @@ static int ServerMapList(const char *,int size,void *data)
 }
 static void OpenVote() {
 #if USE_VGUI
- if(gViewPort && !camera.active) gViewPort->ShowVGUIMenu(22);
+ if(gViewPort) gViewPort->ShowVGUIMenu(22);
 #endif
 }
 static void OpenMaps() {
 #if USE_VGUI
- if(gViewPort && !camera.active) gViewPort->ShowVGUIMenu(23);
+ if(gViewPort) gViewPort->ShowVGUIMenu(23);
 #endif
 }
 static void OpenInventory() {
@@ -843,7 +861,7 @@ void SvenUI_CloseKeyboard()
 }
 void SvenUI_Reset(bool preserveMaps)
 {
- camera=SvenUI::Camera(); cameraSprite=0; SvenUI_Capture(false); mapEntities.clear(); items.clear(); if(!preserveMaps) maps.clear(); voteEnd=0; Refresh();
+ camera=SvenUI::Camera(); cameraSuspended=false; cameraSprite=0; SvenUI_Capture(false); mapEntities.clear(); items.clear(); if(!preserveMaps) maps.clear(); voteEnd=0; Refresh();
  SvenUI_CloseKeyboard(); dragFinger=-1; for(int i=0;i<4;++i) fingers[i]=-1;
  gEngfuncs.Cvar_SetValue("cl_sven_camera_mouse",0);
  if(gMobileEngfuncs) gMobileEngfuncs->pfnTouchSetClientOnly(false);
@@ -854,7 +872,7 @@ void SvenUI_Reset(bool preserveMaps)
 }
 int SvenUI_Key(int down,int key)
 {
- if(!camera.active) return 1;
+ if(!SvenUI_CameraInputActive()) return 1;
  // VGUI supplies native key codes for the remaining keys.
  return 0;
 }
@@ -862,9 +880,9 @@ extern "C" int DLLEXPORT IN_ClientTouchEvent(int type,int finger,float x,float y
 {
  // Center touch-orbit dot first: it consumes its own touches so the look
  // area never steals a drag started on the dot.
- if( gHUD.m_TouchOrbit.Event( type, finger, x, y, dx, dy ) )
+ if( !SvenUI_Capturing() && gHUD.m_TouchOrbit.Event( type, finger, x, y, dx, dy ) )
   return 1;
- if(!camera.active) return 0;
+ if(!SvenUI_CameraInputActive()) return 0;
 #if USE_VGUI
  if(type==0) { // event_down
   int hit=-1;

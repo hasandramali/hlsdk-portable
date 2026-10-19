@@ -385,7 +385,7 @@ Return 1 to allow engine to process the key, otherwise, act on it as needed
 */
 int DLLEXPORT HUD_Key_Event( int down, int keynum, const char *pszCurrentBinding )
 {
-	if( SvenUI_CameraActive() ) return SvenUI_Key(down,keynum);
+	if( SvenUI_CameraInputActive() ) return SvenUI_Key(down,keynum);
 #if USE_VGUI
 	if (gViewPort)
 		return gViewPort->KeyInput(down, keynum, pszCurrentBinding);

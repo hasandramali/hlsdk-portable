@@ -5,6 +5,8 @@ void SvenUI_CloseKeyboard();
 void SvenUI_Shutdown();
 void SvenUI_VidInit();
 bool SvenUI_CameraActive();
+bool SvenUI_CameraInputActive();
+void SvenUI_SuspendCamera(bool suspended);
 bool SvenUI_Capturing();
 void SvenUI_Capture(bool enabled);
 void SvenUI_ExitCamera();

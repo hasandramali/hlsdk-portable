@@ -21,6 +21,7 @@
 #include "hud.h"
 #include "cl_util.h"
 #include "parsemsg.h"
+#include "sven_ui.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -141,6 +142,9 @@ int CHudMenu::Draw( float flTime )
 			// times up, shutoff
 			m_fMenuDisplayed = 0;
 			m_iFlags &= ~HUD_ACTIVE;
+#if USE_VGUI
+			if( SvenUI_CameraActive() && gViewPort ) gViewPort->UpdateCursorState();
+#endif
 			return 1;
 		}
 	}
@@ -219,6 +223,9 @@ void CHudMenu::SelectMenuItem( int menu_item )
 		// remove the menu
 		m_fMenuDisplayed = 0;
 		m_iFlags &= ~HUD_ACTIVE;
+#if USE_VGUI
+		if( SvenUI_CameraActive() && gViewPort ) gViewPort->UpdateCursorState();
+#endif
 	}
 }
 
@@ -281,6 +288,9 @@ int CHudMenu::MsgFunc_ShowMenu( const char *pszName, int iSize, void *pbuf )
 	}
 
 	m_fWaitingForMore = NeedMore;
+#if USE_VGUI
+	if( SvenUI_CameraActive() && gViewPort ) gViewPort->UpdateCursorState();
+#endif
 
 	return 1;
 }

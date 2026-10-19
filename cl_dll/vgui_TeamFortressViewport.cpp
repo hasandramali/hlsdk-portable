@@ -1523,7 +1523,15 @@ void TeamFortressViewport::ShowVGUIMenu( int iMenu )
 	// See if another menu is visible, and if so, cache this one for display once the other one's finished
 	if( m_pCurrentMenu )
 	{
-		if( m_pCurrentMenu->GetMenuID() == MENU_CLASS && iMenu == MENU_TEAM )
+		if( SvenUI_CameraActive() && iMenu >= 22 && iMenu <= 24 )
+		{
+			m_pCurrentMenu->setVisible( false );
+			pNewMenu->ReplaceNextMenu( m_pCurrentMenu );
+			SetCurrentMenu( pNewMenu );
+			pNewMenu->requestFocus();
+			UpdateCursorState();
+		}
+		else if( m_pCurrentMenu->GetMenuID() == MENU_CLASS && iMenu == MENU_TEAM )
 		{
 			CMenuPanel *temp = m_pCurrentMenu;
 			m_pCurrentMenu->Close();
@@ -1666,8 +1674,18 @@ void TeamFortressViewport::UpdateOnPlayerInfo()
 
 void TeamFortressViewport::UpdateCursorState()
 {
-	SvenUI_Capture(m_pCurrentMenu || m_pCurrentCommandMenu);
-	if( SvenUI_CameraActive() ) { SvenUI_RefreshCursor(); return; }
+	bool cameraMenu = m_pCurrentMenu && m_pCurrentMenu->GetMenuID() == 25;
+	bool textMenu = SvenUI_CameraActive() && cameraMenu && gHUD.m_Menu.m_fMenuDisplayed;
+	SvenUI_SuspendCamera(SvenUI_CameraActive() && (!cameraMenu || textMenu));
+	if( cameraMenu ) m_pCurrentMenu->setVisible(!textMenu);
+	SvenUI_Capture((m_pCurrentMenu && !textMenu) || m_pCurrentCommandMenu);
+	if( SvenUI_CameraInputActive() ) { SvenUI_RefreshCursor(); return; }
+	if( textMenu && cameraMenu )
+	{
+		App::getInstance()->setCursorOveride( App::getInstance()->getScheme()->getCursor(Scheme::scu_none) );
+		CurrentMouseInput()->IN_SetVisibleMouse(false);
+		return;
+	}
 	// Need cursor if any VGUI window is up
 	if( m_pSpectatorPanel->m_menuVisible || m_pCurrentMenu || m_pTeamMenu->isVisible() || GetClientVoiceMgr()->IsInSquelchMode() )
 	{
@@ -1717,6 +1735,7 @@ void TeamFortressViewport::GetAllPlayersInfo( void )
 
 void TeamFortressViewport::paintBackground()
 {
+	if( SvenUI_CameraActive() ) UpdateCursorState();
 	int wide, tall;
 	getParent()->getSize( wide, tall );
 	setSize( wide, tall );
@@ -1819,6 +1838,7 @@ bool TeamFortressViewport::SlotInput( int iSlot )
 // Direct Key Input
 int TeamFortressViewport::KeyInput( int down, int keynum, const char *pszCurrentBinding )
 {
+	if( SvenUI_CameraActive() && m_pCurrentMenu && m_pCurrentMenu->GetMenuID()==25 && gHUD.m_Menu.m_fMenuDisplayed ) return 1;
 	// Enter gets out of Spectator Mode by bringing up the Team Menu
 	if( m_iUser1 && gEngfuncs.Con_IsVisible() == false )
 	{
