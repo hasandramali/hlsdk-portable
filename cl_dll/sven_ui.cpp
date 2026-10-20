@@ -377,7 +377,7 @@ static std::string Property(const MapEntity &e,const char *key)
 {
  MapEntity::const_iterator it=e.find(key); return it==e.end()?std::string():it->second;
 }
-static bool ExitTarget(const std::string &name,int depth,int &budget)
+static bool ExitTarget(const std::string &name,int depth,int &budget,int useType)
 {
  if(name.empty() || depth>8 || --budget<0) return false;
  for(size_t i=0;i<mapEntities.size();++i) {
@@ -385,13 +385,27 @@ static bool ExitTarget(const std::string &name,int depth,int &budget)
   std::string cls=Property(e,"classname");
   if(cls=="trigger_camera") {
    std::string wait=Property(e,"wait"); float time=(float)atof(wait.c_str());
-   if(!wait.empty() && time>0 && time<=.1f && !(atoi(Property(e,"spawnflags").c_str()) & (16|128|512))) return true;
+   int flags=atoi(Property(e,"spawnflags").c_str());
+   if((flags & (128|512))==(128|512) && (useType==0 || useType==3)) return true;
+   if(!wait.empty() && time>0 && time<=.1f && !(flags & (16|128|512))) return true;
   } else if(cls=="multi_manager") {
    for(MapEntity::const_iterator it=e.begin();it!=e.end();++it) {
     std::string target=it->first.substr(0,it->first.find('#'));
-    if(target!="targetname" && target!="classname" && target!="origin" && ExitTarget(target,depth+1,budget)) return true;
+    int targetUseType=3;
+    size_t separator=it->second.find('#');
+    if(separator!=std::string::npos) {
+     std::string state=it->second.substr(separator+1);
+     if(state=="0") targetUseType=0;
+     else if(state=="1") targetUseType=1;
+     else continue;
+    }
+    if(target!="targetname" && target!="classname" && target!="origin" && ExitTarget(target,depth+1,budget,targetUseType)) return true;
    }
-  } else if(cls=="trigger_relay" && ExitTarget(Property(e,"target"),depth+1,budget)) return true;
+  } else if(cls=="trigger_relay") {
+   int state=atoi(Property(e,"triggerstate").c_str());
+   int targetUseType=state==2?3:state;
+   if((state==0 || state==1 || state==2) && ExitTarget(Property(e,"target"),depth+1,budget,targetUseType)) return true;
+  }
  }
  return false;
 }
@@ -418,7 +432,9 @@ static bool ClickMapExit()
  for(size_t i=0;i<mapEntities.size();++i) {
   const MapEntity &e=mapEntities[i];
   int budget=128;
-  if(Property(e,"classname")!="func_button" || !ExitTarget(Property(e,"target"),0,budget)) continue;
+  std::string use=Property(e,"use_type");
+  int useType=use.empty()?3:atoi(use.c_str());
+  if(Property(e,"classname")!="func_button" || !ExitTarget(Property(e,"target"),0,budget,useType)) continue;
   std::string model=Property(e,"model"); if(model.empty() || model[0]!='*') continue;
   int sub=atoi(model.c_str()+1); if(sub<=0 || sub>=world->numsubmodels || !world->submodels) continue;
   float point[3],screen[3];
