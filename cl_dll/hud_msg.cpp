@@ -20,6 +20,7 @@
 #include "sven_ui.h"
 #include "cl_util.h"
 #include "parsemsg.h"
+#include "view.h"
 #include "r_efx.h"
 
 #define MAX_CLIENTS 32
@@ -69,6 +70,7 @@ void CHud::MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	V_ResetViewModelPosition();
 	// MapList arrives during signon, before InitHUD. Keep the received list.
 	SvenUI_Reset(true);
 	// The shared scoreboard array is read by every panel (old and VGUI),

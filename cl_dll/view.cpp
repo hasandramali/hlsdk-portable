@@ -26,6 +26,43 @@
 #include "shake.h"
 #include "hltv.h"
 #include "view.h"
+#include "parsemsg.h"
+
+static bool v_serverViewModelPosition;
+static vec3_t v_serverViewModelOffset;
+
+void V_ResetViewModelPosition( void )
+{
+	v_serverViewModelPosition = false;
+	VectorClear( v_serverViewModelOffset );
+}
+
+static int VModelPosMessage( const char *, int size, void *data )
+{
+	if( !data || size < 1 ) return 0;
+	BEGIN_READ( data, size );
+	bool enabled = READ_BYTE() == 1;
+	if( size != ( enabled ? 13 : 1 )) return 0;
+	if( !enabled )
+		V_ResetViewModelPosition();
+	else
+	{
+		for( int axis = 0; axis < 3; axis++ )
+			v_serverViewModelOffset[axis] = READ_COORD();
+		v_serverViewModelPosition = true;
+	}
+	return 1;
+}
+
+static void V_ApplyServerViewModelPosition( cl_entity_t *view )
+{
+	if( v_serverViewModelPosition )
+	{
+		VectorAdd( view->origin, v_serverViewModelOffset, view->origin );
+	}
+	else
+		view->origin[2] -= 1.0f;
+}
 
 // Spectator Mode
 extern "C" 
@@ -618,7 +655,7 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	// pushing the view origin down off of the same X/Z plane as the ent's origin will give the
 	// gun a very nice 'shifting' effect when the player looks up/down. If there is a problem
 	// with view model distortion, this may be a cause. (SJB). 
-	view->origin[2] -= 1.0f;
+	V_ApplyServerViewModelPosition( view );
 
 	// fudge position around to keep amount of weapon visible
 	// roughly equal with different FOV
@@ -1623,6 +1660,8 @@ V_Init
 */
 void V_Init( void )
 {
+	V_ResetViewModelPosition();
+	gEngfuncs.pfnHookUserMsg( "VModelPos", VModelPosMessage );
 	scr_ofsx = gEngfuncs.pfnRegisterVariable( "scr_ofsx","0", 0 );
 	scr_ofsy = gEngfuncs.pfnRegisterVariable( "scr_ofsy","0", 0 );
 	scr_ofsz = gEngfuncs.pfnRegisterVariable( "scr_ofsz","0", 0 );
