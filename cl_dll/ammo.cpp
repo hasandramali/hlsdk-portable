@@ -88,8 +88,10 @@ int g_weaponselect = 0;
 // CustWeapon carries [SHORT id][STRING subdir] (stock MsgFunc_CustWeapon
 // 0x100047d0 stores it at WEAPON+0x1b5); it is NEVER a class name, so it
 // must not enter the weapon inventory — it only selects the sprite set.
-static char s_szCustSprDir[MAX_HUD_WEAPONS][64];
+static char s_szCustSprDir[MAX_HUD_WEAPONS][0x105];
 static char s_szWeaponSpr[MAX_HUD_WEAPONS][264];
+static bool s_bWeaponSpritesLoaded[MAX_HUD_WEAPONS];
+static float s_flWeaponSpriteRetry[MAX_HUD_WEAPONS];
 
 void WeaponsResource::LoadAllWeaponSprites( void )
 {
@@ -133,6 +135,8 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		return;
 	if( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS )
 	{
+		s_bWeaponSpritesLoaded[pWeapon->iId] = false;
+		s_flWeaponSpriteRetry[pWeapon->iId] = gEngfuncs.GetClientTime() + 1.0f;
 		if( !pWeapon->szSpriteDir[0] && s_szCustSprDir[pWeapon->iId][0] )
 			strlcpy( pWeapon->szSpriteDir, s_szCustSprDir[pWeapon->iId], sizeof( pWeapon->szSpriteDir ) );
 		if( !pWeapon->szSpriteRecord[0] && s_szWeaponSpr[pWeapon->iId][0] )
@@ -163,6 +167,7 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	else
 		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteList );
 	client_sprite_t *pList = SPR_GetList( sz, &i );
+	bool preferredMissing = !pList && spriteDir[0];
 	if( !pList && spriteDir[0] )
 	{
 		snprintf( sz, sizeof( sz ), "sprites/%s.txt", spriteList );
@@ -256,6 +261,20 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	}
 	else
 		pWeapon->hAmmo2 = 0;
+
+	if( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS )
+	{
+		bool loaded = !preferredMissing;
+		const char *names[] = { "crosshair", "autoaim", "zoom", "zoom_autoaim", "weapon", "weapon_s", "ammo", "ammo2" };
+		HSPRITE sprites[] = { pWeapon->hCrosshair, pWeapon->hAutoaim, pWeapon->hZoomedCrosshair, pWeapon->hZoomedAutoaim,
+			pWeapon->hInactive, pWeapon->hActive, pWeapon->hAmmo, pWeapon->hAmmo2 };
+		for( unsigned index = 0; index < sizeof( sprites ) / sizeof( sprites[0] ); index++ )
+		{
+			if( GetSpriteList( pList, names[index], iRes, i ) && !sprites[index] )
+				loaded = false;
+		}
+		s_bWeaponSpritesLoaded[pWeapon->iId] = loaded;
+	}
 }
 
 // Returns the first weapon for a given slot.
@@ -331,6 +350,10 @@ DECLARE_COMMAND( m_Ammo, PrevWeapon )
 
 int CHudAmmo::Init( void )
 {
+	memset( s_szCustSprDir, 0, sizeof( s_szCustSprDir ) );
+	memset( s_szWeaponSpr, 0, sizeof( s_szWeaponSpr ) );
+	memset( s_bWeaponSpritesLoaded, 0, sizeof( s_bWeaponSpritesLoaded ) );
+	memset( s_flWeaponSpriteRetry, 0, sizeof( s_flWeaponSpriteRetry ) );
 	gHUD.AddHudElem( this );
 
 	HOOK_MESSAGE( CurWeapon );
@@ -864,7 +887,7 @@ int CHudAmmo::MsgFunc_WeaponSpr( const char *pszName, int iSize, void *pbuf )
 	int iId = READ_SHORT();
 	const char *pszSpr = READ_STRING();
 
-	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszSpr && pszSpr[0] )
+	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszSpr )
 	{
 		strlcpy( s_szWeaponSpr[iId], pszSpr, sizeof( s_szWeaponSpr[iId] ) );
 		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
@@ -971,6 +994,15 @@ int CHudAmmo::ActiveWeaponId() const
 void CHudAmmo::UpdateCrosshair()
 {
 	wrect_t nullrc = {0,};
+	if( m_pWeapon && m_pWeapon->iId > 0 && m_pWeapon->iId < MAX_HUD_WEAPONS
+		&& ( m_pWeapon->szName[0] || m_pWeapon->szSpriteRecord[0] || s_szWeaponSpr[m_pWeapon->iId][0] )
+		&& !s_bWeaponSpritesLoaded[m_pWeapon->iId] )
+	{
+		float now = gEngfuncs.GetClientTime();
+		float retry = s_flWeaponSpriteRetry[m_pWeapon->iId];
+		if( now >= retry || now < retry - 1.0f )
+			gWR.LoadWeaponSprites( m_pWeapon );
+	}
 	SetScopeOverlay( 0, nullrc );
 	if( !m_pWeapon || ( gHUD.m_iHideHUDDisplay & ( HIDEHUD_WEAPONS | HIDEHUD_ALL ) ) )
 	{
@@ -1155,6 +1187,9 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	if( Weapon.iAmmo2Type >= 0 && Weapon.iMax2 == 0 )
 		return 0;*/
 
+	strlcpy( Weapon.szSpriteRecord, Weapon.szName, sizeof( Weapon.szSpriteRecord ) );
+	strlcpy( s_szWeaponSpr[Weapon.iId], Weapon.szName, sizeof( s_szWeaponSpr[Weapon.iId] ) );
+	s_szCustSprDir[Weapon.iId][0] = '\0';
 	gWR.AddWeapon( &Weapon );
 
 	// TEMP-DIAG (minigun reserve): confirm the ammo types WeaponList carries
@@ -1172,8 +1207,7 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 //
 // CustWeapon -- custom weapon sprite subdirectory, [SHORT id][STRING dir].
 // Stock stores it at WEAPON+0x1b5 for LoadWeaponSprites ("sprites/<dir>/
-// <weapon>.txt"). It is not a selectable name: ignore empty dirs and never
-// let it near the weapon inventory.
+// <weapon>.txt").
 //
 int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 {
@@ -1181,7 +1215,7 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 	int iId = READ_SHORT();
 	const char *pszDir = READ_STRING();
 
-	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszDir && pszDir[0] )
+	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszDir )
 	{
 		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
 		WEAPON *pWeapon = gWR.GetWeapon( iId );

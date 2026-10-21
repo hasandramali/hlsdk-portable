@@ -96,7 +96,7 @@ class SvenNumberHud : public CHudBase
  enum Kind { Number, Sprite, Timer };
  struct Channel {
   SvenUI::NumberDisplay data;
-  float start, reference, framerate;
+  float start, reference, framerate, spriteRetry;
   HSPRITE sprite;
   wrect_t rect;
   Kind kind;
@@ -119,7 +119,7 @@ public:
  int Init() { m_iFlags=HUD_ACTIVE; gHUD.AddHudElem(this); return 1; }
  void Reset() {}
  void InitHUDData() { channels.clear(); }
- int VidInit() { for(auto &entry:channels) { entry.second.sprite=0; entry.second.loaded=false; } return 1; }
+ int VidInit() { for(auto &entry:channels) { entry.second.sprite=0; entry.second.loaded=false; entry.second.spriteRetry=0; } return 1; }
  int Message(int size,void *buffer)
  {
   SvenUI::NumberDisplay data;
@@ -176,8 +176,8 @@ public:
    float elapsed=std::max(0.0f,time-channel.start);
    if(data.hold>=0 && elapsed>data.fadein+data.hold+data.fadeout) continue;
    if(channel.kind==Number && (data.flags&0x40000) && data.value==0) continue;
-   if(!channel.loaded && !data.sprite.empty()) {
-    channel.loaded=true;
+   if(!channel.loaded && !data.sprite.empty() && (time>=channel.spriteRetry || time<channel.spriteRetry-1)) {
+    channel.spriteRetry=time+1;
     int hudSprite=gHUD.GetSpriteIndex(data.sprite.c_str());
     if(hudSprite>=0) {
      channel.sprite=gHUD.GetSprite(hudSprite); channel.rect=gHUD.GetSpriteRect(hudSprite);
@@ -193,6 +193,7 @@ public:
     channel.rect.right=data.left+(data.width?data.width:channel.sprite>0?SPR_Width(channel.sprite,0):0);
     channel.rect.bottom=data.top+(data.height?data.height:channel.sprite>0?SPR_Height(channel.sprite,0):0);
     }
+    channel.loaded=channel.sprite>0;
    }
    char value[48]; int number=channel.kind==Number?(int)data.value:0;
    snprintf(value,sizeof(value),"%d",number<0 && !(data.flags&0x100000)?0:number);
