@@ -96,7 +96,8 @@ int READ_LONG( void )
 		return -1;
 	}
 
- 	c = gpBuf[giRead] + ( gpBuf[giRead + 1] << 8 ) + ( gpBuf[giRead + 2] << 16 ) + ( gpBuf[giRead + 3] << 24 );
+	c = (int)( (unsigned int)gpBuf[giRead] | ( (unsigned int)gpBuf[giRead + 1] << 8 ) |
+		( (unsigned int)gpBuf[giRead + 2] << 16 ) | ( (unsigned int)gpBuf[giRead + 3] << 24 ) );
 
 	giRead += 4;
 

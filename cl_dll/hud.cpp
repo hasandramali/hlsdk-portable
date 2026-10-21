@@ -595,6 +595,8 @@ int CHud::GetSpriteIndex( const char *SpriteName )
 
 void CHud::VidInit( void )
 {
+	extern void SvenEffects_VidInit();
+	SvenEffects_VidInit();
 	int j;
 	m_scrinfo.iSize = sizeof(m_scrinfo);
 	GetScreenInfo( &m_scrinfo );

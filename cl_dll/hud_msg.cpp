@@ -70,6 +70,8 @@ void CHud::MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf )
 
 void CHud::MsgFunc_InitHUD( const char *pszName, int iSize, void *pbuf )
 {
+	extern void SvenEffects_Reset();
+	SvenEffects_Reset();
 	V_ResetViewModelPosition();
 	// MapList arrives during signon, before InitHUD. Keep the received list.
 	SvenUI_Reset(true);

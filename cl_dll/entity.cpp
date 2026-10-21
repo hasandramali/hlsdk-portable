@@ -22,6 +22,7 @@
 #include "pm_shared.h"
 
 void Game_AddObjects( void );
+extern void SvenEffects_CreateEntities();
 
 extern vec3_t v_origin;
 
@@ -721,6 +722,7 @@ Gives us a chance to add additional entities to the render this frame
 */
 void DLLEXPORT HUD_CreateEntities( void )
 {
+	SvenEffects_CreateEntities();
 	// e.g., create a persistent cl_entity_t somewhere.
 	// Load an appropriate model into it ( gEngfuncs.CL_LoadModel )
 	// Call gEngfuncs.CL_CreateVisibleEntity to add it to the visedicts list
@@ -805,6 +807,7 @@ void DLLEXPORT HUD_TempEntUpdate (
 	int			i;
 	TEMPENTITY	*pTemp, *pnext, *pprev;
 	float		/*freq,*/ gravity, gravitySlow, life, fastFreq;
+	bool needsPlayerPrediction = false;
 
 	// Nothing to simulate
 	if( !*ppTempEntActive )	
@@ -814,13 +817,24 @@ void DLLEXPORT HUD_TempEntUpdate (
 	// that the client has the player list. We run this code once when we detect any COLLIDEALL 
 	// tent, then set this BOOL to true so the code doesn't get run again if there's more than
 	// one COLLIDEALL ent for this update. (often are).
-	gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
+	if( frametime > 0 )
+	{
+		for( pTemp = *ppTempEntActive; pTemp; pTemp = pTemp->next )
+		{
+			if( pTemp->flags & (FTENT_COLLIDEALL | FTENT_CLIENTCUSTOM) )
+			{
+				needsPlayerPrediction = true;
+				break;
+			}
+		}
+	}
+	if( needsPlayerPrediction ) gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
 
 	// Store off the old count
 	gEngfuncs.pEventAPI->EV_PushPMStates();
 
 	// Now add in all of the players.
-	gEngfuncs.pEventAPI->EV_SetSolidPlayers( -1 );
+	if( needsPlayerPrediction ) gEngfuncs.pEventAPI->EV_SetSolidPlayers( -1 );
 
 	// !!!BUGBUG	-- This needs to be time based
 	gTempEntFrame = ( gTempEntFrame + 1 ) & 31;
