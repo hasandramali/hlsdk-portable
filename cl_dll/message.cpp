@@ -407,76 +407,56 @@ int CHudMessage::Draw( float fTime )
 
 void CHudMessage::MessageAdd( const char *pName, float time )
 {
-	client_textmessage_t *channelMessage = TextMessageGet( pName[0] == '#' ? pName + 1 : pName );
-	if( channelMessage )
+	if( !pName || !pName[0] )
+		return;
+
+	client_textmessage_t *message = TextMessageGet( pName[0] == '#' ? pName + 1 : pName );
+	if( !message )
 	{
-		for( int messageIndex = 0; messageIndex < maxHUDMessages; messageIndex++ )
+		g_pCustomMessage.effect = 2;
+		g_pCustomMessage.r1 = g_pCustomMessage.g1 = g_pCustomMessage.b1 = g_pCustomMessage.a1 = 100;
+		g_pCustomMessage.r2 = 240;
+		g_pCustomMessage.g2 = 110;
+		g_pCustomMessage.b2 = 0;
+		g_pCustomMessage.a2 = 0;
+		g_pCustomMessage.x = -1.0f;
+		g_pCustomMessage.y = 0.7f;
+		g_pCustomMessage.fadein = 0.01f;
+		g_pCustomMessage.fadeout = 1.5f;
+		g_pCustomMessage.fxtime = 0.25f;
+		g_pCustomMessage.holdtime = 5;
+		g_pCustomMessage.pName = g_pCustomName;
+		strlcpy( g_pCustomText, pName, sizeof( g_pCustomText ));
+		g_pCustomMessage.pMessage = g_pCustomText;
+		message = &g_pCustomMessage;
+	}
+
+	for( int index = 0; index < maxHUDMessages; index++ )
+	{
+		if( m_pMessages[index] == message )
 		{
-			if( m_pMessages[messageIndex] == channelMessage )
-			{
-				m_startTime[messageIndex] = time;
-				return;
-			}
+			m_startTime[index] = time;
+			return;
 		}
 	}
 
-	int i, j;
-	client_textmessage_t *tempMessage;
-
-	for( i = 0; i < maxHUDMessages; i++ )
+	for( int index = 0; index < maxHUDMessages; index++ )
 	{
-		if( !m_pMessages[i] )
+		if( !m_pMessages[index] )
+			continue;
+		if( !strcmp( message->pMessage, m_pMessages[index]->pMessage ))
+			return;
+		if( fabs( message->y - m_pMessages[index]->y ) < 0.0001f
+			&& fabs( message->x - m_pMessages[index]->x ) < 0.0001f )
+			m_pMessages[index] = NULL;
+	}
+
+	for( int index = 0; index < maxHUDMessages; index++ )
+	{
+		if( !m_pMessages[index] )
 		{
-			// Trim off a leading # if it's there
-			if( pName[0] == '#' ) 
-				tempMessage = TextMessageGet( pName + 1 );
-			else
-				tempMessage = TextMessageGet( pName );
-			// If we couldnt find it in the titles.txt, just create it
-			if( !tempMessage )
-			{
-				g_pCustomMessage.effect = 2;
-				g_pCustomMessage.r1 = g_pCustomMessage.g1 = g_pCustomMessage.b1 = g_pCustomMessage.a1 = 100;
-				g_pCustomMessage.r2 = 240;
-				g_pCustomMessage.g2 = 110;
-				g_pCustomMessage.b2 = 0;
-				g_pCustomMessage.a2 = 0;
-				g_pCustomMessage.x = -1.0f;		// Centered
-				g_pCustomMessage.y = 0.7f;
-				g_pCustomMessage.fadein = 0.01f;
-				g_pCustomMessage.fadeout = 1.5f;
-				g_pCustomMessage.fxtime = 0.25f;
-				g_pCustomMessage.holdtime = 5;
-				g_pCustomMessage.pName = g_pCustomName;
-				strcpy( g_pCustomText, pName );
-				g_pCustomMessage.pMessage = g_pCustomText;
-
-				tempMessage = &g_pCustomMessage;
-			}
-
-			for( j = 0; j < maxHUDMessages; j++ )
-			{
-				if( m_pMessages[j] )
-				{
-					// is this message already in the list
-					if( !strcmp( tempMessage->pMessage, m_pMessages[j]->pMessage ) )
-					{
-						return;
-					}
-
-					// get rid of any other messages in same location (only one displays at a time)
-					if( fabs( tempMessage->y - m_pMessages[j]->y ) < 0.0001f )
-					{
-						if( fabs( tempMessage->x - m_pMessages[j]->x ) < 0.0001f )
-						{
-							m_pMessages[j] = NULL;
-						}
-					}
-				}
-			}
-
-			m_pMessages[i] = tempMessage;
-			m_startTime[i] = time;
+			m_pMessages[index] = message;
+			m_startTime[index] = time;
 			return;
 		}
 	}
