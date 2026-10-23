@@ -27,6 +27,7 @@
 
 #include <string.h>
 #include <stdio.h>
+#include <limits.h>
 
 #include "ammohistory.h"
 #if USE_VGUI
@@ -651,9 +652,13 @@ int CHudAmmo::MsgFunc_AmmoX( const char *pszName, int iSize, void *pbuf )
 
 int CHudAmmo::MsgFunc_AmmoPickup( const char *pszName, int iSize, void *pbuf )
 {
+	if( !pbuf || iSize != 5 )
+		return 0;
 	BEGIN_READ( pbuf, iSize );
 	int iIndex = READ_BYTE();
-	int iCount = READ_BYTE();
+	int iCount = READ_LONG();
+	if( iCount == INT_MIN )
+		return 0;
 
 	// Add ammo to the history
 	gHR.AddToHistory( HISTSLOT_AMMO, iIndex, abs( iCount ) );
