@@ -67,7 +67,7 @@ static HSPRITE LoadWeaponSprite( const char *spriteDir, const char *spriteName )
 		strlcat( resource, ".spr", sizeof( resource ) );
 
 	sprite = SPR_Load( resource );
-	if( sprite || !spriteDir || !spriteDir[0] || !strncmp( spriteName, "sprites/", 8 ) )
+	if( sprite || !spriteDir || !spriteDir[0] || strchr( spriteName, '/' ) || strchr( spriteName, '\\' ) )
 		return sprite;
 
 	snprintf( path, sizeof( path ), "sprites/%s/%s", spriteDir, spriteName );
