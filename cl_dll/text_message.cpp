@@ -32,9 +32,25 @@
 
 DECLARE_MESSAGE( m_TextMessage, TextMsg )
 
+extern int KB_ConvertString( char *in, char **ppout );
+
+static int PrintKB( const char *, int size, void *buffer )
+{
+	if( size < 1 || !buffer || !memchr( buffer, 0, size ) ) return 0;
+	BEGIN_READ( buffer, size );
+	char *converted = NULL;
+	if( KB_ConvertString( READ_STRING(), &converted ) )
+	{
+		ConsolePrint( converted );
+		free( converted );
+	}
+	return 1;
+}
+
 int CHudTextMessage::Init( void )
 {
 	HOOK_MESSAGE( TextMsg );
+	gEngfuncs.pfnHookUserMsg( "PrintKB", PrintKB );
 
 	gHUD.AddHudElem( this );
 

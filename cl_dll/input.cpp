@@ -162,14 +162,17 @@ int KB_ConvertString( char *in, char **ppout )
 		return 0;
 
 	*ppout = NULL;
+	if( !in )
+		return 0;
 	p = in;
 	pOut = sz;
-	while( *p )
+	char *limit = sz + sizeof( sz ) - 1;
+	while( *p && pOut < limit )
 	{
 		if( *p == '+' )
 		{
 			pEnd = binding;
-			while( *p && ( isalnum( *p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
+			while( *p && ( isalnum( (unsigned char)*p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
 			{
 				*pEnd++ = *p++;
 			}
@@ -193,12 +196,12 @@ int KB_ConvertString( char *in, char **ppout )
 				pEnd = binding;
 			}
 
-			while( *pEnd )
+			while( *pEnd && pOut < limit )
 			{
 				*pOut++ = *pEnd++;
 			}
 
-			if( pBinding )
+			if( pBinding && pOut < limit )
 			{
 				*pOut++ = ']';
 			}
@@ -212,6 +215,8 @@ int KB_ConvertString( char *in, char **ppout )
 	*pOut = '\0';
 
 	pOut = (char *)malloc( strlen( sz ) + 1 );
+	if( !pOut )
+		return 0;
 	strcpy( pOut, sz );
 	*ppout = pOut;
 

@@ -106,6 +106,11 @@ int READ_LONG( void )
 
 float READ_FLOAT( void )
 {
+	if( giRead + 4 > giSize )
+	{
+		giBadRead = true;
+		return 0;
+	}
 	union
 	{
 		byte b[4];
