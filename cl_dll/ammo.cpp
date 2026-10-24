@@ -668,8 +668,12 @@ int CHudAmmo::MsgFunc_AmmoPickup( const char *pszName, int iSize, void *pbuf )
 
 int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 {
+	if( !pbuf || ( iSize != 2 && iSize != 4 ))
+		return 0;
 	BEGIN_READ( pbuf, iSize );
-	int iIndex = READ_SHORT();
+	int iIndex = iSize == 4 ? READ_LONG() : READ_SHORT();
+	if( iIndex <= 0 || iIndex >= MAX_HUD_WEAPONS )
+		return 0;
 
 	// Add the weapon to the history
 	gHR.AddToHistory( HISTSLOT_WEAP, iIndex );
