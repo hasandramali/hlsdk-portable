@@ -27,6 +27,7 @@
 #include "hltv.h"
 #include "view.h"
 #include "parsemsg.h"
+#include <cmath>
 
 static bool v_serverViewModelPosition;
 static vec3_t v_serverViewModelOffset;
@@ -95,6 +96,7 @@ extern "C"
 }
 
 void V_DropPunchAngle( float frametime, float *ev_punchangle );
+static void V_UpdatePunchAngle( float time );
 void VectorAngles( const float *forward, float *angles );
 
 #include "r_studioint.h"
@@ -129,6 +131,7 @@ qboolean v_resetCamera = 1;
 
 vec3_t v_client_aimangles;
 vec3_t g_ev_punchangle;
+static double v_punchUpdateTime = -1;
 
 cvar_t	*scr_ofsx;
 cvar_t	*scr_ofsy;
@@ -680,9 +683,8 @@ void V_CalcNormalRefdef( struct ref_params_s *pparams )
 	VectorAdd( pparams->viewangles, pparams->punchangle, pparams->viewangles );
 
 	// Include client side punch, too
+	V_UpdatePunchAngle( pparams->time );
 	VectorAdd( pparams->viewangles, (float *)&g_ev_punchangle, pparams->viewangles );
-
-	V_DropPunchAngle( pparams->frametime, (float *)&g_ev_punchangle );
 
 	// smooth out stair step ups
 #if 1
@@ -1636,9 +1638,26 @@ void V_DropPunchAngle( float frametime, float *ev_punchangle )
 	float len;
 
 	len = VectorNormalize( ev_punchangle );
-	len -= ( 10.0f + len * 0.5f ) * (float)frametime;
+	len = ( len + 20.0f ) * powf( 1.0f - 0.5f / 30.0f, frametime * 30.0f ) - 20.0f;
 	len = Q_max( len, 0.0f );
 	VectorScale( ev_punchangle, len, ev_punchangle );
+}
+
+static void V_UpdatePunchAngle( float time )
+{
+	if( !std::isfinite( time ))
+		return;
+	if( v_punchUpdateTime < 0 || time < v_punchUpdateTime - 0.1 )
+	{
+		VectorClear( g_ev_punchangle );
+		v_punchUpdateTime = time;
+		return;
+	}
+	double steps = floor( ( time - v_punchUpdateTime + 0.0001 ) * 30.0 );
+	if( steps < 1 )
+		return;
+	V_DropPunchAngle( (float)( steps / 30.0 ), (float *)&g_ev_punchangle );
+	v_punchUpdateTime += steps / 30.0;
 }
 
 /*
@@ -1650,6 +1669,13 @@ Client side punch effect
 */
 void V_PunchAxis( int axis, float punch )
 {
+	if( axis < 0 || axis > 2 || !std::isfinite( punch ))
+		return;
+	float time = gEngfuncs.GetClientTime();
+	if( !std::isfinite( time ))
+		return;
+	V_UpdatePunchAngle( time );
+	v_punchUpdateTime = time;
 	g_ev_punchangle[axis] = punch;
 }
 
@@ -1660,6 +1686,8 @@ V_Init
 */
 void V_Init( void )
 {
+	VectorClear( g_ev_punchangle );
+	v_punchUpdateTime = -1;
 	V_ResetViewModelPosition();
 	gEngfuncs.pfnHookUserMsg( "VModelPos", VModelPosMessage );
 	scr_ofsx = gEngfuncs.pfnRegisterVariable( "scr_ofsx","0", 0 );
