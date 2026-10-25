@@ -26,9 +26,13 @@ extern "C"
 #include "const.h"
 #include "camera.h"
 #include "in_defs.h"
+#include "pm_defs.h"
 //#include "view.h"
 #include <string.h>
 #include <ctype.h>
+#include <cmath>
+
+extern "C" playermove_t *pmove;
 
 #if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
@@ -82,6 +86,12 @@ cvar_t	*cl_pitchspeed;
 cvar_t	*cl_anglespeedkey;
 cvar_t	*cl_vsmoothing;
 static cvar_t *cl_autojump;
+static cvar_t *cl_strafe;
+static cvar_t *cl_strafe_dir;
+static cvar_t *cl_strafe_sidemove;
+static cvar_t *cl_strafe_angle;
+static cvar_t *cl_strafe_speed;
+
 
 /*
 ===============================================================================
@@ -859,6 +869,75 @@ void CL_AdjustAngles( float frametime, float *viewangles )
 		viewangles[ROLL] = -50;
 }
 
+static void CL_Strafe( usercmd_t *cmd )
+{
+	if( !pmove || pmove->spectator || pmove->iuser1 || pmove->dead
+		|| pmove->onground != -1 || pmove->movetype != MOVETYPE_WALK || pmove->waterlevel > 1 )
+		return;
+	if( !std::isfinite( cl_strafe_dir->value ) || cl_strafe_dir->value < 1 || cl_strafe_dir->value > 4
+		|| !std::isfinite( cl_strafe_sidemove->value ) || !std::isfinite( cl_strafe_angle->value )
+		|| !std::isfinite( cl_strafe_speed->value ) || cl_strafe_speed->value < 0 )
+		return;
+
+	float speed = sqrtf( pmove->velocity[0] * pmove->velocity[0] + pmove->velocity[1] * pmove->velocity[1] );
+	if( !std::isfinite( speed ))
+		return;
+	int direction = (int)cl_strafe_dir->value;
+	float directionAngle = ( direction == 4 ? -90.0f : ( direction - 1 ) * 90.0f ) * M_PI / 180.0f;
+	float forward = cmd->forwardmove;
+	float side = cmd->sidemove;
+
+	if( speed < 15 )
+	{
+		if( cmd->buttons & IN_FORWARD )
+			forward = 900;
+		else if( cmd->buttons & IN_BACK )
+			forward = -900;
+		else if( !( cmd->buttons & ( IN_MOVELEFT | IN_MOVERIGHT )))
+			forward = 900;
+		if( cmd->buttons & IN_MOVELEFT )
+			side = -900;
+		else if( cmd->buttons & IN_MOVERIGHT )
+			side = 900;
+	}
+	else
+	{
+		vec3_t viewangles;
+		gEngfuncs.GetViewAngles( viewangles );
+		if( !std::isfinite( viewangles[YAW] ))
+			return;
+		float velocityYaw = atan2f( pmove->velocity[1], pmove->velocity[0] );
+		float viewYaw = viewangles[YAW] * M_PI / 180.0f;
+		float difference = sinf( velocityYaw - viewYaw - directionAngle );
+		difference = atan2f( difference, sqrtf( fmaxf( 0, 1 - difference * difference )));
+		side = cl_strafe_sidemove->value * ( difference > 0 ? -1 : 1 );
+		float reflectedYaw = 2 * viewYaw - velocityYaw + directionAngle;
+		forward = side * ( sinf( viewYaw ) * cosf( reflectedYaw ) - cosf( viewYaw ) * sinf( reflectedYaw ));
+		side *= sinf( viewYaw ) * sinf( reflectedYaw ) + cosf( viewYaw ) * cosf( reflectedYaw );
+		float strafeAngle = velocityYaw == 0 ? ( cl_strafe_angle->value > 0 ? M_PI / 2 :
+			cl_strafe_angle->value < 0 ? -M_PI / 2 : 0 ) : atanf( cl_strafe_angle->value / velocityYaw );
+		if( strafeAngle >= fabsf( difference ))
+		{
+			const float *bodyDirection = direction & 1 ? pmove->forward : pmove->right;
+			float projectedX = bodyDirection[0] * pmove->velocity[0];
+			float projectedY = bodyDirection[1] * pmove->velocity[1];
+			float projectedSpeed = projectedX * projectedX + projectedY * projectedY;
+			if( projectedSpeed > 0 && std::isfinite( projectedSpeed ))
+				forward += sqrtf( cl_strafe_speed->value * 100000.0f / projectedSpeed );
+		}
+	}
+
+	if( !std::isfinite( forward ) || !std::isfinite( side ))
+		return;
+	switch( direction )
+	{
+	case 1: cmd->forwardmove = forward; cmd->sidemove = side; break;
+	case 2: cmd->forwardmove = -side; cmd->sidemove = forward; break;
+	case 3: cmd->forwardmove = -forward; cmd->sidemove = -side; break;
+	case 4: cmd->forwardmove = side; cmd->sidemove = -forward; break;
+	}
+}
+
 /*
 ================
 CL_CreateMove
@@ -902,6 +981,12 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 		{	
 			cmd->forwardmove += cl_forwardspeed->value * CL_KeyState( &in_forward );
 			cmd->forwardmove -= cl_backspeed->value * CL_KeyState( &in_back );
+		}
+
+		if( cl_strafe && cl_strafe->value == 1 && !SvenUI_Capturing() )
+		{
+			cmd->buttons = CL_ButtonBits( 0 );
+			CL_Strafe( cmd );
 		}
 
 		// adjust for speed key
@@ -1227,6 +1312,12 @@ void InitInput( void )
 
 	cl_vsmoothing		= gEngfuncs.pfnRegisterVariable( "cl_vsmoothing", "0.05", FCVAR_ARCHIVE );
 	cl_autojump		= gEngfuncs.pfnRegisterVariable( "cl_autojump", "0", 0 );
+	cl_strafe = gEngfuncs.pfnRegisterVariable( "cl_strafe", "0", FCVAR_PROTECTED );
+	cl_strafe_dir = gEngfuncs.pfnRegisterVariable( "cl_strafe_dir", "3", FCVAR_PROTECTED );
+	cl_strafe_sidemove = gEngfuncs.pfnRegisterVariable( "cl_strafe_sidemove", "450", FCVAR_PROTECTED );
+	cl_strafe_angle = gEngfuncs.pfnRegisterVariable( "cl_strafe_angle", "30", FCVAR_PROTECTED );
+	cl_strafe_speed = gEngfuncs.pfnRegisterVariable( "cl_strafe_speed", "70", FCVAR_PROTECTED );
+
 
 	m_pitch			= gEngfuncs.pfnRegisterVariable( "m_pitch","0.022", FCVAR_ARCHIVE );
 	m_yaw			= gEngfuncs.pfnRegisterVariable( "m_yaw","0.022", FCVAR_ARCHIVE );
