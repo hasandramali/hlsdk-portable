@@ -36,6 +36,7 @@
 #include "game.h"
 #include "pm_shared.h"
 #include "hltv.h"
+#include <limits.h>
 
 // #define DUCKFIX
 
@@ -198,7 +199,7 @@ void LinkUserMessages( void )
 	gmsgGeigerRange = REG_USER_MSG( "Geiger", 1 );
 	gmsgFlashlight = REG_USER_MSG( "Flashlight", 2 );
 	gmsgFlashBattery = REG_USER_MSG( "FlashBat", 1 );
-	gmsgHealth = REG_USER_MSG( "Health", 1 );
+	gmsgHealth = REG_USER_MSG( "Health", 4 );
 	gmsgDamage = REG_USER_MSG( "Damage", 18 );
 	gmsgBattery = REG_USER_MSG( "Battery", 2);
 	gmsgTrain = REG_USER_MSG( "Train", 1 );
@@ -927,7 +928,7 @@ void CBasePlayer::Killed( entvars_t *pevAttacker, int iGib )
 	// send "health" update message to zero
 	m_iClientHealth = 0;
 	MESSAGE_BEGIN( MSG_ONE, gmsgHealth, NULL, pev );
-		WRITE_BYTE( m_iClientHealth );
+		WRITE_LONG( m_iClientHealth );
 	MESSAGE_END();
 
 	// Tell Ammo Hud that the player is dead
@@ -4065,19 +4066,17 @@ void CBasePlayer::UpdateClientData( void )
 		gDisplayTitle = 0;
 	}
 
-	if( pev->health != m_iClientHealth )
+	int iHealth = 0;
+	if( pev->health > 0 )
+		iHealth = (double)pev->health >= INT_MAX ? INT_MAX : Q_max( 1, (int)pev->health );
+	if( iHealth != m_iClientHealth )
 	{
-#define clamp( val, min, max ) ( ((val) > (max)) ? (max) : ( ((val) < (min)) ? (min) : (val) ) )
-		int iHealth = clamp( pev->health, 0, 255 ); // make sure that no negative health values are sent
-		if( pev->health > 0.0f && pev->health <= 1.0f )
-			iHealth = 1;
-
 		// send "health" update message
 		MESSAGE_BEGIN( MSG_ONE, gmsgHealth, NULL, pev );
-			WRITE_BYTE( iHealth );
+			WRITE_LONG( iHealth );
 		MESSAGE_END();
 
-		m_iClientHealth = (int)pev->health;
+		m_iClientHealth = iHealth;
 	}
 
 	if( (int)pev->armorvalue != m_iClientBattery )
