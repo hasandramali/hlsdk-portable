@@ -41,7 +41,7 @@ static int PrintKB( const char *, int size, void *buffer )
 	char *converted = NULL;
 	if( KB_ConvertString( READ_STRING(), &converted ) )
 	{
-		ConsolePrint( converted );
+		CenterPrint( converted );
 		free( converted );
 	}
 	return 1;
