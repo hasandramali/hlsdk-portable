@@ -120,7 +120,9 @@ int WeaponsResource::HasAmmo( WEAPON *p )
 	if( p->iMax1 == -1 )
 		return TRUE;
 
-	return ( p->iAmmoType == -1 ) || p->iClip > 0 || CountAmmo( p->iAmmoType ) 
+	qboolean secondClip = p->iClip2 > 0 && (( p->iFlags & WEAPON_FLAGS_DUALWIELD )
+		? ( p->iState & WEAPON_STATE_DUALWIELD ) : p->iAmmo2Type >= 0 );
+	return ( p->iAmmoType == -1 ) || p->iClip > 0 || secondClip || CountAmmo( p->iAmmoType )
 		|| CountAmmo( p->iAmmo2Type ) || ( p->iFlags & WEAPON_FLAGS_SELECTONEMPTY );
 }
 
@@ -1036,12 +1038,14 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	wrect_t nullrc = {0,};
 	int fOnTarget = FALSE;
 
+	if( !pbuf || iSize != 11 )
+		return 0;
 	BEGIN_READ( pbuf, iSize );
 
 	int iState = READ_BYTE();
 	int iId = READ_SHORT();
 	int iClip = READ_LONG();
-	int iAmmo = READ_LONG(); // clip and ammo are sent as LONG by Sven's server, -1 means infinite
+	int iAmmo = READ_LONG();
 
 	// Match Sven client.dll (0x10002fb0): values below -1 are clamped to 0,
 	// -1 stays -1 (infinite). Vanilla only ever sends 0..255 so both paths are safe.
@@ -1099,27 +1103,9 @@ int CHudAmmo::MsgFunc_CurWeapon( const char *pszName, int iSize, void *pbuf )
 	// the removed mirror if this ever needs revisiting.)
 	// Stock client.dll (MsgFunc_CurWeapon core 0x10002fb0) stores this second
 	// LONG per-weapon at WEAPON+0xa4 for EVERY weapon, so keep the same
-	// stock parity here: iClip2 always mirrors iAmmo (-1 stays n/a). Only
-	// the weapons below ever display it; nothing else reads iClip2.
+	// stock parity here: iClip2 always mirrors iAmmo (-1 stays n/a).
 	pWeapon->iClip2 = iAmmo;
-
-	// TEMP-DIAG (dual-uzi HUD): while the akimbo second-clip wire source is
-	// being confirmed, dump what the server actually sends for the akimbo so
-	// a single test run settles it. Remove with the iClip2 work.
-	// Sven minigun (id 21) and shockroach (id 28) are included: their visible
-	// counts ride CurWeapon's second LONG, so the dump settles clip/reserve/
-	// iAmmo semantics for both in one run. client.so carries no
-	// weapon_shockroach definition, so id 28 is matched by id as well.
-	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0
-		&& ( strstr( pWeapon->szName, "uziakimbo" ) || iId == 21 || iId == 28
-			|| !strcmp( pWeapon->szName, "weapon_minigun" )
-			|| !strcmp( pWeapon->szName, "weapon_shockroach" )))
-	{
-		gEngfuncs.Con_Printf( "TEMP-DIAG CurWeapon name=%s id=%d state=%d clip=%d iAmmo=%d iClip2=%d ammoT=%d count=%d ammo2T=%d count2=%d\n",
-			pWeapon->szName, iId, iState, iClip, iAmmo, pWeapon->iClip2,
-			pWeapon->iAmmoType, gWR.CountAmmo( pWeapon->iAmmoType ),
-			pWeapon->iAmmo2Type, gWR.CountAmmo( pWeapon->iAmmo2Type ));
-	}
+	pWeapon->iState = iState;
 
 	// not the current weapon (vanilla state 0 / Sven bit 0), so update no more
 	if( !( iState & 1 ) )
@@ -1172,7 +1158,7 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	Weapon.iId = READ_SHORT();
 	Weapon.iFlags = READ_BYTE();
 	Weapon.iClip = 0;
-	Weapon.iClip2 = -1; // dual-uzi second clip, filled from CurWeapon.iAmmo
+	Weapon.iClip2 = -1; // filled from the second CurWeapon LONG
 
 	if( Weapon.iId < 0 || Weapon.iId >= MAX_HUD_WEAPONS )
 		return 0;
@@ -1458,42 +1444,7 @@ int CHudAmmo::Draw( float flTime )
 	// NOTE: Sven numbers ammo types from 0 (binary-verified: the real client
 	// stores the raw BYTE index with no gate), so index 0 is a real type.
 	// The old "> 0" test hid the reserve counter of every 0-indexed weapon.
-	if( !strcmp( m_pWeapon->szName, "weapon_uziakimbo" ) && m_pWeapon->iClip2 >= 0 )
-	{
-		// Dual uzis (Sven-style): one compact row right-aligned, clip1 | clip2 
-		// followed by the reserve, e.g. "32 | 32 / 150". Both clips come from
-		// the server's CurWeapon fields (iClip / iAmmo), reserve from iAmmoType.
-		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
-		int iBarWidth = AmmoWidth / 10;
-		int iOffset = ( m_pWeapon->rcAmmo.bottom - m_pWeapon->rcAmmo.top ) / 8;
-		int digits1 = 1, digits2 = 1;
-		float fRight;
-
-		for( int n = Q_max( pw->iClip, 0 ); n >= 10; n /= 10 ) digits1++;
-		for( int n = m_pWeapon->iClip2; n >= 10; n /= 10 ) digits2++;
-
-		// Reserve (3 digits) + icon, right-anchored same as the single-clip row
-		x = ScreenWidth - ( 8 * AmmoWidth ) - iIconWidth;
-		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmoType ), r, g, b );
-		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
-
-		// clip2 | just left of the reserve
-		x -= AmmoWidth / 2 + iBarWidth;
-		UnpackRGB( r, g, b, RGB_BLUEISH );
-		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
-		ScaleColors( r, g, b, a );
-		fRight = x - AmmoWidth / 2;
-		gHUD.DrawHudNumber( (int)fRight - digits2 * AmmoWidth, y, iFlags, m_pWeapon->iClip2, r, g, b );
-
-		// clip1 | just left of clip2
-		x = (int)fRight - digits2 * AmmoWidth - AmmoWidth / 2 - iBarWidth;
-		UnpackRGB( r, g, b, RGB_BLUEISH );
-		FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
-		ScaleColors( r, g, b, a );
-		fRight = x - AmmoWidth / 2;
-		gHUD.DrawHudNumber( (int)fRight - digits1 * AmmoWidth, y, iFlags, pw->iClip, r, g, b );
-	}
-	else if( m_pWeapon->iAmmoType >= 0 )
+	if( m_pWeapon->iAmmoType >= 0 )
 	{
 		int iIconWidth = m_pWeapon->rcAmmo.right - m_pWeapon->rcAmmo.left;
 
@@ -1501,7 +1452,7 @@ int CHudAmmo::Draw( float flTime )
 		// second LONG (stock stores it per-weapon at WEAPON+0xa4; AmmoX never
 		// carries those types), so a zero AmmoX reserve means "wire silent",
 		// not "empty": fall back to iClip2 instead of showing 00. Scoped to
-		// these two names like the akimbo rule above; everything else keeps
+		// these two names; everything else keeps
 		// the AmmoX reserve untouched.
 		int iReserve = gWR.CountAmmo( pw->iAmmoType );
 		// client.so has no weapon_shockroach definition, so match id 28 too.
@@ -1549,21 +1500,37 @@ int CHudAmmo::Draw( float flTime )
 		gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo, &m_pWeapon->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
 	}
 
-	// Does weapon have seconday ammo?
-	if( pw->iAmmo2Type >= 0 )
+	qboolean dualWeapon = ( pw->iFlags & WEAPON_FLAGS_DUALWIELD ) != 0;
+	if( dualWeapon && ( pw->iState & WEAPON_STATE_DUALWIELD ) && pw->iClip2 >= 0 )
 	{
-		int iIconWidth = m_pWeapon->rcAmmo2.right - m_pWeapon->rcAmmo2.left;
-
-		// Do we have secondary ammo?
-		if( ( pw->iAmmo2Type != 0 ) && ( gWR.CountAmmo( pw->iAmmo2Type ) > 0 ) )
+		int iIconWidth = pw->rcAmmo.right - pw->rcAmmo.left;
+		y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
+		x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
+		x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip2, r, g, b );
+		int iOffset = ( pw->rcAmmo.bottom - pw->rcAmmo.top ) / 8;
+		gHUD.DrawSprite( x, y - iOffset, pw->hAmmo, &pw->rcAmmo, r, g, b, 0, SPR_ADDITIVE );
+	}
+	else if( !dualWeapon && pw->iAmmo2Type >= 0 )
+	{
+		int iReserve = gWR.CountAmmo( pw->iAmmo2Type );
+		if( iReserve > 0 || pw->iClip2 > 0 )
 		{
+			int iIconWidth = pw->rcAmmo2.right - pw->rcAmmo2.left;
 			y -= gHUD.m_iFontHeight + gHUD.m_iFontHeight / 4;
-			x = ScreenWidth - 4 * AmmoWidth - iIconWidth;
-			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, gWR.CountAmmo( pw->iAmmo2Type ), r, g, b );
-
-			// Draw the ammo Icon
-			int iOffset = ( m_pWeapon->rcAmmo2.bottom - m_pWeapon->rcAmmo2.top) / 8;
-			gHUD.DrawSprite( x, y - iOffset, m_pWeapon->hAmmo2, &m_pWeapon->rcAmmo2, r, g, b, 0, SPR_ADDITIVE );
+			x = ScreenWidth - ( pw->iClip2 >= 0 ? 8 : 4 ) * AmmoWidth - iIconWidth;
+			if( pw->iClip2 >= 0 )
+			{
+				x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, pw->iClip2, r, g, b );
+				int iBarWidth = AmmoWidth / 10;
+				x += AmmoWidth / 2;
+				UnpackRGB( r, g, b, RGB_BLUEISH );
+				FillRGBA( x, y, iBarWidth, gHUD.m_iFontHeight, r, g, b, a );
+				x += iBarWidth + AmmoWidth / 2;
+				ScaleColors( r, g, b, a );
+			}
+			x = gHUD.DrawHudNumber( x, y, iFlags | DHN_3DIGITS, iReserve, r, g, b );
+			int iOffset = ( pw->rcAmmo2.bottom - pw->rcAmmo2.top ) / 8;
+			gHUD.DrawSprite( x, y - iOffset, pw->hAmmo2, &pw->rcAmmo2, r, g, b, 0, SPR_ADDITIVE );
 		}
 	}
 	return 1;

@@ -20,6 +20,8 @@
 #define MAX_HUD_WEAPONS 256
 
 #define WEAPON_FLAGS_SELECTONEMPTY	1
+#define WEAPON_FLAGS_DUALWIELD	32
+#define WEAPON_STATE_DUALWIELD	4
 
 #define WEAPON_IS_ONTARGET 0x40
 
@@ -35,7 +37,8 @@ struct WEAPON
 	int		iFlags;
 	int		iId;
 	int		iClip;
-	int		iClip2;		// second gun clip (dual uziakimbo only, -1 = n/a)
+	int		iClip2;		// second clip (off-hand magazine or loaded secondary ammo, -1 = n/a)
+	int		iState;
 	char		szSpriteDir[0x105];	// Sven CustWeapon record (+0x1b5)
 	char		szSpriteRecord[0x105];	// Sven WeaponSpr record (+0xb0)
 

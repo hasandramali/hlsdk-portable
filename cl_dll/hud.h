@@ -604,6 +604,7 @@ private:
 	struct NotifyItem
 	{
 		int iId;
+		int row;
 		float birth;
 		float expire;
 		float y;

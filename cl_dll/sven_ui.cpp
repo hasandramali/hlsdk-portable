@@ -1294,6 +1294,9 @@ void CHudPickupNotify::OnWeaponPickup( int iId )
  {
   if( m_items[i].iId == iId )
   {
+   int row = PickupNotifyRow( iId );
+   if( row >= 0 )
+    m_items[i].row = row;
    m_items[i].birth = now;
    m_items[i].expire = now + PICKUP_NOTIFY_LIFE;
    m_items[i].pushed = 0.0f;
@@ -1308,6 +1311,7 @@ void CHudPickupNotify::OnWeaponPickup( int iId )
  for( int i = m_count; i > 0; i-- )
   m_items[i] = m_items[i - 1];
  m_items[0].iId = iId;
+ m_items[0].row = PickupNotifyRow( iId );
  m_items[0].birth = now;
  m_items[0].expire = now + PICKUP_NOTIFY_LIFE;
  m_items[0].y = 0.0f;
@@ -1404,7 +1408,9 @@ int CHudPickupNotify::Draw( float flTime )
    g = 255;
   // "[N] weapon_name" with the engine inventory row (1-based, like the
   // menu labels); plain name until the engine row arrives.
-  int row = PickupNotifyRow( it->iId );
+  if( it->row < 0 )
+   it->row = PickupNotifyRow( it->iId );
+  int row = it->row;
   if( row >= 0 )
   {
    char text[96];
