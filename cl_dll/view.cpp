@@ -1638,7 +1638,7 @@ void V_DropPunchAngle( float frametime, float *ev_punchangle )
 	float len;
 
 	len = VectorNormalize( ev_punchangle );
-	len = ( len + 20.0f ) * powf( 1.0f - 0.5f / 30.0f, frametime * 30.0f ) - 20.0f;
+	len = ( len + 22.0f ) * powf( 1.0f - 0.5f / 30.0f, frametime * 30.0f ) - 22.0f;
 	len = Q_max( len, 0.0f );
 	VectorScale( ev_punchangle, len, ev_punchangle );
 }
