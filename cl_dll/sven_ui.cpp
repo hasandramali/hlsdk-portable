@@ -971,7 +971,7 @@ int CHudEsfCrosshair::Draw( float flTime )
 	int h = m_rcCrosshair.bottom - m_rcCrosshair.top;
 	int scopeW = m_rcScopeOverlay.right - m_rcScopeOverlay.left;
 	int scopeH = m_rcScopeOverlay.bottom - m_rcScopeOverlay.top;
-	if( gHUD.m_iFOV < 90 && m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
+	if( gHUD.m_iFOV < 75 && m_hsprScopeOverlay && scopeW > 0 && scopeH > 0 )
 	{
 		SPR_Set( m_hsprScopeOverlay, 255, 255, 255 );
 		if( gEngfuncs.pfnGetCvarFloat( "gl_spriteblend" ) == 0.0f )

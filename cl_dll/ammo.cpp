@@ -1020,7 +1020,7 @@ void CHudAmmo::UpdateCrosshair()
 		SetCrosshair( 0, nullrc, 0, 0, 0 );
 		return;
 	}
-	if( gHUD.m_iFOV < 90 )
+	if( gHUD.m_iFOV < 75 )
 	{
 		if( m_fOnTarget && m_pWeapon->hZoomedAutoaim )
 			SetCrosshair( m_pWeapon->hZoomedAutoaim, m_pWeapon->rcZoomedAutoaim, 255, 255, 255 );
