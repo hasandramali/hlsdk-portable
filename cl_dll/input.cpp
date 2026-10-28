@@ -13,7 +13,9 @@
 // rights reserved.
 
 #include "hud.h"
+#include "sven_ui.h"
 #include "cl_util.h"
+#include "cl_entity.h"
 #include "camera.h"
 extern "C"
 {
@@ -28,7 +30,9 @@ extern "C"
 #include <string.h>
 #include <ctype.h>
 
+#if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
+#endif
 
 extern "C" 
 {
@@ -77,6 +81,7 @@ cvar_t	*cl_yawspeed;
 cvar_t	*cl_pitchspeed;
 cvar_t	*cl_anglespeedkey;
 cvar_t	*cl_vsmoothing;
+static cvar_t *cl_autojump;
 
 /*
 ===============================================================================
@@ -119,6 +124,7 @@ kbutton_t	in_attack2;
 kbutton_t	in_up;
 kbutton_t	in_down;
 kbutton_t	in_duck;
+kbutton_t	in_ducktap;
 kbutton_t	in_reload;
 kbutton_t	in_alt1;
 kbutton_t	in_score;
@@ -156,14 +162,17 @@ int KB_ConvertString( char *in, char **ppout )
 		return 0;
 
 	*ppout = NULL;
+	if( !in )
+		return 0;
 	p = in;
 	pOut = sz;
-	while( *p )
+	char *limit = sz + sizeof( sz ) - 1;
+	while( *p && pOut < limit )
 	{
 		if( *p == '+' )
 		{
 			pEnd = binding;
-			while( *p && ( isalnum( *p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
+			while( *p && ( isalnum( (unsigned char)*p ) || ( pEnd == binding ) ) && ( ( pEnd - binding ) < 63 ) )
 			{
 				*pEnd++ = *p++;
 			}
@@ -187,12 +196,12 @@ int KB_ConvertString( char *in, char **ppout )
 				pEnd = binding;
 			}
 
-			while( *pEnd )
+			while( *pEnd && pOut < limit )
 			{
 				*pOut++ = *pEnd++;
 			}
 
-			if( pBinding )
+			if( pBinding && pOut < limit )
 			{
 				*pOut++ = ']';
 			}
@@ -206,6 +215,8 @@ int KB_ConvertString( char *in, char **ppout )
 	*pOut = '\0';
 
 	pOut = (char *)malloc( strlen( sz ) + 1 );
+	if( !pOut )
+		return 0;
 	strcpy( pOut, sz );
 	*ppout = pOut;
 
@@ -379,8 +390,11 @@ Return 1 to allow engine to process the key, otherwise, act on it as needed
 */
 int DLLEXPORT HUD_Key_Event( int down, int keynum, const char *pszCurrentBinding )
 {
+	if( SvenUI_CameraInputActive() ) return SvenUI_Key(down,keynum);
+#if USE_VGUI
 	if (gViewPort)
 		return gViewPort->KeyInput(down, keynum, pszCurrentBinding);
+#endif
 	return 1;
 }
 
@@ -593,6 +607,67 @@ void IN_DuckUp( void )
 	KeyUp( &in_duck );
 }
 
+void IN_DucktapDown( void )
+{
+	KeyDown( &in_ducktap );
+}
+
+void IN_DucktapUp( void )
+{
+	KeyUp( &in_ducktap );
+}
+
+struct client_move_state_t
+{
+	qboolean onground;
+	qboolean inwater;
+	qboolean walking;
+};
+
+static client_move_state_t clientMoveState = { false, false, true };
+
+extern "C" void update_player_info( int onground, int inwater, int walking )
+{
+	clientMoveState.onground = onground != 0;
+	clientMoveState.inwater = inwater != 0;
+	clientMoveState.walking = walking != 0;
+}
+
+static void IN_HandleAutojump( usercmd_t *cmd )
+{
+	static qboolean jumpWasDownLastFrame;
+	qboolean shouldReleaseJump = false;
+
+	if( cl_autojump && cl_autojump->value != 0.0f )
+	{
+		shouldReleaseJump = !clientMoveState.onground && !clientMoveState.inwater && clientMoveState.walking;
+		if( jumpWasDownLastFrame && clientMoveState.onground && !clientMoveState.inwater && clientMoveState.walking )
+			shouldReleaseJump = true;
+		if( shouldReleaseJump )
+			cmd->buttons &= ~IN_JUMP;
+	}
+
+	jumpWasDownLastFrame = ( cmd->buttons & IN_JUMP ) != 0;
+}
+
+static void IN_HandleDucktap( usercmd_t *cmd )
+{
+	static qboolean duckWasDownLastFrame;
+	qboolean duckIsPressed = ( in_duck.state & 1 ) != 0;
+	qboolean shouldReleaseDuck = !clientMoveState.onground && !clientMoveState.inwater && clientMoveState.walking && !duckIsPressed;
+
+	if( duckWasDownLastFrame && clientMoveState.onground && !clientMoveState.inwater && clientMoveState.walking )
+		shouldReleaseDuck = true;
+
+	if( shouldReleaseDuck )
+	{
+		cmd->buttons &= ~IN_DUCK;
+		in_duck.state = 0;
+	}
+
+	duckWasDownLastFrame = ( cmd->buttons & IN_DUCK ) != 0;
+}
+
 void IN_ReloadDown( void )
 {
 	KeyDown( &in_reload );
@@ -649,22 +724,27 @@ void IN_Impulse( void )
 void IN_ScoreDown( void )
 {
 	KeyDown( &in_score );
-	if ( gHUD.UseVguiScoreBoard() && gViewPort )
+#if USE_VGUI && !USE_NOVGUI_SCOREBOARD
+	if ( gViewPort )
 	{
 		gViewPort->ShowScoreBoard();
-		return;
 	}
+#else
 	gHUD.m_Scoreboard.UserCmd_ShowScores();
+#endif
 }
 
 void IN_ScoreUp( void )
 {
 	KeyUp( &in_score );
+#if USE_VGUI && !USE_NOVGUI_SCOREBOARD
 	if ( gViewPort )
 	{
 		gViewPort->HideScoreBoard();
 	}
+#else
 	gHUD.m_Scoreboard.UserCmd_HideScores();
+#endif
 }
 
 void IN_MLookUp( void )
@@ -850,6 +930,7 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 
 		// Allow mice and other controllers to add their inputs
 		IN_Move( frametime, cmd );
+
 	}
 
 	cmd->impulse = in_impulse;
@@ -861,10 +942,25 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 	// set button and flag bits
 	//
 	cmd->buttons = CL_ButtonBits( 1 );
+	if( in_ducktap.state & 1 )
+	{
+		cmd->buttons |= IN_DUCK;
+		IN_HandleDucktap( cmd );
+	}
+	else
+		IN_HandleAutojump( cmd );
 
+	if( SvenUI_Capturing() )
+	{
+		cmd->buttons = 0;
+		cmd->forwardmove = cmd->sidemove = cmd->upmove = 0;
+	}
+
+#if USE_VGUI
 	// If they're in a modal dialog, ignore the attack button.
 	if(GetClientVoiceMgr()->IsInSquelchMode())
 		cmd->buttons &= ~IN_ATTACK;
+#endif
 
 	// Using joystick?
 	if( in_joystick->value )
@@ -881,8 +977,10 @@ void DLLEXPORT CL_CreateMove( float frametime, struct usercmd_s *cmd, int active
 
 	gEngfuncs.GetViewAngles( (float *)viewangles );
 	// Set current view angles.
-
-	if( g_iAlive )
+	// A health-0 spectator (g_iUser1 observer mode) must keep sending live
+	// angles or the server observer never turns/moves; only a truly dead
+	// (non-spectating) player keeps the frozen death-cam angles.
+	if( CL_Spectating() )
 	{
 		VectorCopy( viewangles, cmd->viewangles );
 		VectorCopy( viewangles, oldangles );
@@ -920,9 +1018,11 @@ int CL_ButtonBits( int bResetState )
 
 	if( in_attack.state & 3 )
 	{
+#if !USE_VGUI || USE_NOVGUI_MOTD
 		if( gHUD.m_MOTD.m_bShow )
 			gHUD.m_MOTD.Reset();
 		else
+#endif
 			bits |= IN_ATTACK;
 	}
 
@@ -1097,6 +1197,8 @@ void InitInput( void )
 	gEngfuncs.pfnAddCommand( "-jlook", IN_JLookUp );
 	gEngfuncs.pfnAddCommand( "+duck", IN_DuckDown );
 	gEngfuncs.pfnAddCommand( "-duck", IN_DuckUp );
+	gEngfuncs.pfnAddCommand( "+ducktap", IN_DucktapDown );
+	gEngfuncs.pfnAddCommand( "-ducktap", IN_DucktapUp );
 	gEngfuncs.pfnAddCommand( "+reload", IN_ReloadDown );
 	gEngfuncs.pfnAddCommand( "-reload", IN_ReloadUp );
 	gEngfuncs.pfnAddCommand( "+alt1", IN_Alt1Down );
@@ -1124,6 +1226,7 @@ void InitInput( void )
 	cl_pitchdown		= gEngfuncs.pfnRegisterVariable( "cl_pitchdown", "89", 0 );
 
 	cl_vsmoothing		= gEngfuncs.pfnRegisterVariable( "cl_vsmoothing", "0.05", FCVAR_ARCHIVE );
+	cl_autojump		= gEngfuncs.pfnRegisterVariable( "cl_autojump", "0", 0 );
 
 	m_pitch			= gEngfuncs.pfnRegisterVariable( "m_pitch","0.022", FCVAR_ARCHIVE );
 	m_yaw			= gEngfuncs.pfnRegisterVariable( "m_yaw","0.022", FCVAR_ARCHIVE );
