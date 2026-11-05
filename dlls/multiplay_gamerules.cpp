@@ -401,13 +401,7 @@ void CHalfLifeMultiplay::InitHUD( CBasePlayer *pl )
 	// sending just one score makes the hud scoreboard active;  otherwise
 	// it is just disabled for single play
 	//fix a bug in the information about the player's score when he left the server, so that his score would not be transferred to another player(seems to work)
-	MESSAGE_BEGIN( MSG_ALL, gmsgScoreInfo );
-		WRITE_BYTE( ENTINDEX(pl->edict()) );
-		WRITE_SHORT( (int)pl->pev->frags );
-		WRITE_SHORT( pl->m_iDeaths );
-		WRITE_SHORT( 0 );
-		WRITE_SHORT( GetTeamIndex( pl->m_szTeamName ) + 1 );
-	MESSAGE_END();
+	UTIL_SendScoreInfo( pl, MSG_ALL, NULL );
 
 	SendMOTDToClient( pl->edict() );
 
@@ -419,13 +413,7 @@ void CHalfLifeMultiplay::InitHUD( CBasePlayer *pl )
 
 		if( plr )
 		{
-			MESSAGE_BEGIN( MSG_ONE, gmsgScoreInfo, NULL, pl->edict() );
-				WRITE_BYTE( i );	// client number
-				WRITE_SHORT( (int)plr->pev->frags );
-				WRITE_SHORT( plr->m_iDeaths );
-				WRITE_SHORT( 0 );
-				WRITE_SHORT( GetTeamIndex( plr->m_szTeamName ) + 1 );
-			MESSAGE_END();
+			UTIL_SendScoreInfo( plr, MSG_ONE, pl->edict() );
 		}
 	}
 
@@ -621,13 +609,7 @@ void CHalfLifeMultiplay::PlayerKilled( CBasePlayer *pVictim, entvars_t *pKiller,
 
 	// update the scores
 	// killed scores
-	MESSAGE_BEGIN( MSG_ALL, gmsgScoreInfo );
-		WRITE_BYTE( ENTINDEX(pVictim->edict()) );
-		WRITE_SHORT( (int)pVictim->pev->frags );
-		WRITE_SHORT( pVictim->m_iDeaths );
-		WRITE_SHORT( 0 );
-		WRITE_SHORT( GetTeamIndex( pVictim->m_szTeamName ) + 1 );
-	MESSAGE_END();
+	UTIL_SendScoreInfo( pVictim, MSG_ALL, NULL );
 
 	// killers score, if it's a player
 	CBaseEntity *ep = CBaseEntity::Instance( pKiller );
@@ -635,13 +617,7 @@ void CHalfLifeMultiplay::PlayerKilled( CBasePlayer *pVictim, entvars_t *pKiller,
 	{
 		CBasePlayer *PK = (CBasePlayer*)ep;
 
-		MESSAGE_BEGIN( MSG_ALL, gmsgScoreInfo );
-			WRITE_BYTE( ENTINDEX( PK->edict() ) );
-			WRITE_SHORT( (int)PK->pev->frags );
-			WRITE_SHORT( PK->m_iDeaths );
-			WRITE_SHORT( 0 );
-			WRITE_SHORT( GetTeamIndex( PK->m_szTeamName ) + 1 );
-		MESSAGE_END();
+		UTIL_SendScoreInfo( PK, MSG_ALL, NULL );
 
 		// let the killer paint another decal as soon as he'd like.
 		PK->m_flNextDecalTime = gpGlobals->time;

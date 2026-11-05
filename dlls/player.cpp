@@ -212,7 +212,7 @@ void LinkUserMessages( void )
 	gmsgInitHUD = REG_USER_MSG( "InitHUD", 0 );		// called every time a new player joins the server
 	gmsgShowGameTitle = REG_USER_MSG( "GameTitle", 1 );
 	gmsgDeathMsg = REG_USER_MSG( "DeathMsg", -1 );
-	gmsgScoreInfo = REG_USER_MSG( "ScoreInfo", 9 );
+	gmsgScoreInfo = REG_USER_MSG( "ScoreInfo", 22 );
 	gmsgTeamInfo = REG_USER_MSG( "TeamInfo", -1 );  // sets the name of a player's team
 	gmsgTeamScore = REG_USER_MSG( "TeamScore", -1 );  // sets the score of a team on the scoreboard
 	gmsgGameMode = REG_USER_MSG( "GameMode", 1 );
@@ -231,6 +231,28 @@ void LinkUserMessages( void )
 
 	gmsgStatusText = REG_USER_MSG( "StatusText", -1 );
 	gmsgStatusValue = REG_USER_MSG( "StatusValue", 3 );
+}
+
+void UTIL_SendScoreInfo( CBasePlayer *player, int destination, edict_t *recipient )
+{
+	if( !player )
+		return;
+
+	union { float value; int bits; } score, health, armor;
+	score.value = player->pev->frags;
+	health.value = player->pev->health;
+	armor.value = player->pev->armorvalue;
+
+	MESSAGE_BEGIN( destination, gmsgScoreInfo, NULL, recipient );
+		WRITE_BYTE( ENTINDEX( player->edict() ) );
+		WRITE_LONG( score.bits );
+		WRITE_LONG( player->m_iDeaths );
+		WRITE_LONG( health.bits );
+		WRITE_LONG( armor.bits );
+		WRITE_BYTE( 0 );
+		WRITE_SHORT( 0 );
+		WRITE_SHORT( g_pGameRules->GetTeamIndex( player->m_szTeamName ) + 1 );
+	MESSAGE_END();
 }
 
 LINK_ENTITY_TO_CLASS( player, CBasePlayer )
@@ -1747,13 +1769,7 @@ void CBasePlayer::AddPoints( int score, BOOL bAllowNegativeScore )
 
 	pev->frags += score;
 
-	MESSAGE_BEGIN( MSG_ALL, gmsgScoreInfo );
-		WRITE_BYTE( ENTINDEX( edict() ) );
-		WRITE_SHORT( (int)pev->frags );
-		WRITE_SHORT( m_iDeaths );
-		WRITE_SHORT( 0 );
-		WRITE_SHORT( g_pGameRules->GetTeamIndex( m_szTeamName ) + 1 );
-	MESSAGE_END();
+	UTIL_SendScoreInfo( this, MSG_ALL, NULL );
 }
 
 void CBasePlayer::AddPointsToTeam( int score, BOOL bAllowNegativeScore )
@@ -2914,6 +2930,7 @@ void CBasePlayer::Spawn( void )
 	pev->solid = SOLID_SLIDEBOX;
 	pev->movetype = MOVETYPE_WALK;
 	pev->max_health = pev->health;
+	pev->maxspeed = CVAR_GET_FLOAT( "sv_maxspeed" );
 	pev->flags &= FL_PROXY;	// keep proxy flag sey by engine
 	pev->flags |= FL_CLIENT;
 	pev->air_finished = gpGlobals->time + 12;
@@ -4069,6 +4086,7 @@ void CBasePlayer::UpdateClientData( void )
 	int iHealth = 0;
 	if( pev->health > 0 )
 		iHealth = (double)pev->health >= INT_MAX ? INT_MAX : Q_max( 1, (int)pev->health );
+	BOOL scoreInfoChanged = ( iHealth != m_iClientHealth || (int)pev->armorvalue != m_iClientBattery );
 	if( iHealth != m_iClientHealth )
 	{
 		// send "health" update message
@@ -4090,6 +4108,9 @@ void CBasePlayer::UpdateClientData( void )
 			WRITE_SHORT( (int)pev->armorvalue );
 		MESSAGE_END();
 	}
+
+	if( scoreInfoChanged )
+		UTIL_SendScoreInfo( this, MSG_ALL, NULL );
 
 	if( pev->dmg_take || pev->dmg_save || m_bitsHUDDamage != m_bitsDamageType )
 	{

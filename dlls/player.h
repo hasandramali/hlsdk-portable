@@ -338,5 +338,6 @@ public:
 
 extern int gmsgHudText;
 extern BOOL gInitHUD;
+void UTIL_SendScoreInfo( CBasePlayer *player, int destination, edict_t *recipient );
 
 #endif // PLAYER_H
