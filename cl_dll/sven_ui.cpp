@@ -81,10 +81,8 @@ public:
   int red=100, green=130, blue=200;
   float alpha=CVAR_GET_FLOAT("hud_alpha_default");
   ScaleColors(red,green,blue,(int)std::max(0.0f,std::min(255.0f,alpha)));
-  if(gEngfuncs.pfnSPR_DrawGeneric) {
-   gEngfuncs.pfnSPR_Set(sprite,red,green,blue);
-   gEngfuncs.pfnSPR_DrawGeneric(0,xpos,ypos,&rectangle,0x0302,1,width,height);
-  } else gHUD.DrawSprite(xpos,ypos,sprite,&rectangle,red,green,blue,0,SPR_ADDITIVE);
+  // client.dll 0x10034ddc: always additive, at the icon's own size.
+  gHUD.DrawSprite(xpos,ypos,sprite,&rectangle,red,green,blue,0,SPR_ADDITIVE);
   if(items.size()>1)
    gHUD.DrawHudNumberString(ScreenWidth-4,ypos+height,0,(int)std::min((size_t)99,items.size()),red,green,blue);
   return 1;

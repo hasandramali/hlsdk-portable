@@ -1378,10 +1378,6 @@ void TeamFortressViewport::SetCurrentMenu( CMenuPanel *pMenu )
 
 		m_pCurrentMenu->Open();
 	}
-	else
-	{
-		gEngfuncs.pfnClientCmd( "closemenus;" );
-	}
 }
 
 //================================================================

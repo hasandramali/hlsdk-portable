@@ -987,6 +987,16 @@ void CStudioModelRenderer::StudioSetupBones( void )
 		}
 	}
 
+	// Sven client.dll 0x1005853f: a positive entity scale multiplies the 3x3
+	// part of the root rotation, leaving the origin column alone.
+	if( m_pCurrentEntity->curstate.scale > 0.0f )
+	{
+		for( i = 0; i < 3; i++ )
+		{
+			for( int j = 0; j < 3; j++ )
+				(*m_protationmatrix)[i][j] *= m_pCurrentEntity->curstate.scale;
+		}
+	}
 
 	for( i = 0; i < iNumbones; i++ )
 	{

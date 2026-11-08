@@ -743,7 +743,7 @@ static int Gib( const char *, int size, void *buffer )
 	int index = EffectModel( model );
 	if( !index ) return 1;
 	cvar_t *countCvar = gEngfuncs.pfnGetCvarPointer( "cl_gibcount" );
-	int count = countCvar ? (int)countCvar->value : 6;
+	int count = countCvar ? (int)countCvar->value : 10;
 	if( count <= 0 ) return 1;
 	if( count > 32 ) count = 32;
 	if( kind == 4 ) count *= 3;
@@ -820,6 +820,5 @@ void SvenEffects_Init()
 	gEngfuncs.pfnHookUserMsg( "GargSplash", GargSplash );
 	gEngfuncs.pfnHookUserMsg( "CbElec", CbElec );
 	gEngfuncs.pfnHookUserMsg( "ToxicCloud", ToxicCloud );
-	if( !gEngfuncs.pfnGetCvarPointer( "cl_gibcount" ) )
-		gEngfuncs.pfnRegisterVariable( "cl_gibcount", "6", FCVAR_ARCHIVE );
+	gEngfuncs.pfnRegisterVariable( "cl_gibcount", "10", 0 ); // client.dll 0x10030aae
 }
