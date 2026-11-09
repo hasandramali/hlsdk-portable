@@ -56,6 +56,10 @@ extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int 
 	{
 		WEAPON *weapon = gWR.GetWeapon( id );
 		const unsigned char owned = weapons[id].m_iId == id;
+		// A weapon that isn't active gets no CurWeapon, so a picked-up one with
+		// rounds only in its clip would otherwise look empty and unselectable.
+		if( owned && weapon->iId )
+			weapon->iClip = weapons[id].m_iClip;
 		if( !weapon->iId || owned == gWR.bSynced[id] )
 			continue;
 		gWR.bSynced[id] = owned;

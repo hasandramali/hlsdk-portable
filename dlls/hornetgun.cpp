@@ -157,6 +157,12 @@ void CHgun::PrimaryAttack()
 #endif
 	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usHornetFire, 0.0f, g_vecZero, g_vecZero, 0.0f, 0.0f, 0, 0, 0, 0 );
 
+	if( g_bSvenLocalWeapons )
+	{
+		SendWeaponAnim( HGUN_SHOOT );
+		SvenPredictedSound( m_pPlayer, 11 + RANDOM_LONG( 0, 2 ), 1.0f, CHAN_WEAPON );
+	}
+
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
@@ -243,6 +249,12 @@ void CHgun::SecondaryAttack( void )
 	flags = 0;
 #endif
 	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usHornetFire, 0.0f, g_vecZero, g_vecZero, 0.0f, 0.0f, 0, 0, 0, 0 );
+
+	if( g_bSvenLocalWeapons )
+	{
+		SendWeaponAnim( HGUN_SHOOT );
+		SvenPredictedSound( m_pPlayer, 11 + RANDOM_LONG( 0, 2 ), 1.0f, CHAN_WEAPON );
+	}
 
 	m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
 	m_pPlayer->m_iWeaponVolume = NORMAL_GUN_VOLUME;

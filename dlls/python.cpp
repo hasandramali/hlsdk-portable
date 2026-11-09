@@ -200,7 +200,7 @@ void CPython::PrimaryAttack()
 #else
 	flags = 0;
 #endif
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usFirePython, 0.0, g_vecZero, g_vecZero, vecDir.x, vecDir.y, 0, 0, 0, 0 );
+	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usFirePython, 0.0, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
 
 	if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		// HEV suit - indicate out of ammo condition
@@ -229,6 +229,7 @@ void CPython::Reload( void )
 #endif
 	if( DefaultReload( PYTHON_MAX_CLIP, PYTHON_RELOAD, 2.0f, bUseScope ) )
 	{
+		SvenPredictedSound( m_pPlayer, 4, 0.8f, CHAN_WEAPON, 1.5f );
 		m_flSoundDelay = 1.5f;
 	}
 }

@@ -687,6 +687,10 @@ void HUD_SetLastOrg( void )
 	}
 }
 
+enum { GAUSS_NO_AMMO_BURN = 1000 };
+static const float GAUSS_SVEN_FULL_CHARGE = 3.0f; // client.dll 0x1008a57c
+static float s_flSvenCommandEnd = 0.0f;
+
 static bool SvenSendsAmmoInUser( int id )
 {
 	switch( id )
@@ -790,8 +794,8 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		break;
 	case WEAPON_GAUSS:
 		data->fuser1 = player.m_flNextAmmoBurn;
-		data->fuser2 = player.m_flStartCharge;
-		data->fuser3 = player.m_flPlayAftershock;
+		data->fuser2 = player.m_flStartCharge - s_flSvenCommandEnd;
+		data->fuser3 = player.m_flPlayAftershock != 0.0f ? player.m_flPlayAftershock - s_flSvenCommandEnd : 0.0f;
 		data->fuser4 = weapon->m_fInAttack;
 		break;
 	case WEAPON_HANDGRENADE:
@@ -807,6 +811,11 @@ static void SvenEncodeWholeNumberStates( int id, CBasePlayerWeapon *weapon, weap
 {
 	if( id == WEAPON_SATCHEL )
 		data->fuser1 = weapon->m_chargeReady;
+	else if( id == WEAPON_GAUSS )
+	{
+		if( player.m_flNextAmmoBurn >= GAUSS_NO_AMMO_BURN )
+			data->fuser1 = -1.0f;
+	}
 	else
 		SvenWeapons_Encode( id, data );
 }
@@ -965,10 +974,12 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	{
 		// Gauss charge lives in its own weapon record on Sven.
 		const weapon_data_t *gauss = &from->weapondata[WEAPON_GAUSS];
-		player.m_flNextAmmoBurn = gauss->fuser1;
-		player.m_flStartCharge = gauss->fuser2;
-		player.m_flPlayAftershock = gauss->fuser3;
-		player.m_flAmmoStartCharge = ( gauss->fuser2 - gpGlobals->time ) + ( bIsMultiplayer() ? 1.5f : 4.0f );
+		// Sven counts these down to negative ages; HL compares absolute times.
+		player.m_flNextAmmoBurn = gauss->fuser1 <= -0.9f ? GAUSS_NO_AMMO_BURN : gauss->fuser1;
+		player.m_flStartCharge = (float)time + gauss->fuser2;
+		player.m_flPlayAftershock = gauss->fuser3 != 0.0f ? (float)time + gauss->fuser3 : 0.0f;
+		player.m_flAmmoStartCharge = GAUSS_SVEN_FULL_CHARGE + gauss->fuser2;
+		s_flSvenCommandEnd = (float)time + cmd->msec / 1000.0f;
 	}
 
 	//Stores all our ammo info, so the client side weapons can use them.
@@ -1008,7 +1019,7 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	to->client.m_iId = from->client.m_iId;
 
 	// Now see if we issued a changeweapon command ( and we're not dead )
-	if( cmd->weaponselect && ( player.pev->deadflag != ( DEAD_DISCARDBODY + 1 ) ) )
+	if( cmd->weaponselect && cmd->weaponselect < MAX_WEAPONS && ( player.pev->deadflag != ( DEAD_DISCARDBODY + 1 ) ) )
 	{
 		// Switched to a different weapon?
 		if( from->weapondata[cmd->weaponselect].m_iId == cmd->weaponselect )

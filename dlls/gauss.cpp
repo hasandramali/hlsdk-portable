@@ -178,6 +178,7 @@ void CGauss::SecondaryAttack()
 		if( m_fInAttack != 0 )
 		{
 			EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_WEAPON, "weapons/electro4.wav", 1.0, ATTN_NORM, 0, 80 + RANDOM_LONG( 0, 0x3f ) );
+			SvenPredictedSound( m_pPlayer, 8, 1.0f, CHAN_WEAPON );
 			SendWeaponAnim( GAUSS_IDLE );
 			m_fInAttack = 0;
 		}
@@ -237,7 +238,7 @@ void CGauss::SecondaryAttack()
 #endif
 			{
 				m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-				m_pPlayer->m_flNextAmmoBurn = UTIL_WeaponTimeBase() + 0.1f;
+				m_pPlayer->m_flNextAmmoBurn = UTIL_WeaponTimeBase() + ( g_bSvenLocalWeapons ? 0.3f : 0.1f );
 			}
 			else
 			{
@@ -389,7 +390,7 @@ void CGauss::Fire( Vector vecOrigSrc, Vector vecDir, float flDamage )
 		 g_irunninggausspred = true;
 #endif	
 	// The main firing event is sent unreliably so it won't be delayed.
-	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_pPlayer->edict(), m_usGaussFire, 0.0f, m_pPlayer->pev->origin, m_pPlayer->pev->angles, flDamage, 0.0, 0, 0, m_fPrimaryFire ? 1 : 0, 0 );
+	PLAYBACK_EVENT_FULL( FEV_NOTHOST, m_pPlayer->edict(), m_usGaussFire, 0.0f, m_pPlayer->pev->origin, m_pPlayer->pev->angles, g_bSvenLocalWeapons ? 20.0f : flDamage, 0.0, 0, 0, m_fPrimaryFire ? 1 : 0, 0 );
 
 	// This reliable event is used to stop the spinning sound
 	// It's delayed by a fraction of second to make sure it is delayed by 1 frame on the client
@@ -556,12 +557,15 @@ void CGauss::WeaponIdle( void )
 		{
 		case 0:
 			EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_WEAPON, "weapons/electro4.wav", RANDOM_FLOAT( 0.7f, 0.8f ), ATTN_NORM );
+			SvenPredictedSound( m_pPlayer, 8, RANDOM_FLOAT( 0.7f, 0.8f ), CHAN_WEAPON );
 			break;
 		case 1:
 			EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_WEAPON, "weapons/electro5.wav", RANDOM_FLOAT( 0.7f, 0.8f ), ATTN_NORM );
+			SvenPredictedSound( m_pPlayer, 9, RANDOM_FLOAT( 0.7f, 0.8f ), CHAN_WEAPON );
 			break;
 		case 2:
 			EMIT_SOUND( ENT( m_pPlayer->pev ), CHAN_WEAPON, "weapons/electro6.wav", RANDOM_FLOAT( 0.7f, 0.8f ), ATTN_NORM );
+			SvenPredictedSound( m_pPlayer, 10, RANDOM_FLOAT( 0.7f, 0.8f ), CHAN_WEAPON );
 			break;
 		case 3:
 			break; // no sound

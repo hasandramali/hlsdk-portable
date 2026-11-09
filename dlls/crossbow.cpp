@@ -371,6 +371,14 @@ void CCrossbow::FireSniperBolt()
 
 	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usCrossbow2, 0.0f, g_vecZero, g_vecZero, 0, 0, m_iClip, 0, 0, 0 );
 
+	if( g_bSvenLocalWeapons )
+	{
+		SendWeaponAnim( m_iClip ? CROSSBOW_FIRE1 : CROSSBOW_FIRE3 );
+		SvenPredictedSound( m_pPlayer, 5, 1.0f, CHAN_WEAPON );
+		if( m_iClip )
+			SvenPredictedSound( m_pPlayer, 6, 0.95f, CHAN_ITEM );
+	}
+
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
@@ -413,6 +421,14 @@ void CCrossbow::FireBolt()
 #endif
 
 	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usCrossbow, 0.0f, g_vecZero, g_vecZero, 0, 0, m_iClip, 0, 0, 0 );
+
+	if( g_bSvenLocalWeapons )
+	{
+		SendWeaponAnim( m_iClip ? CROSSBOW_FIRE1 : CROSSBOW_FIRE3 );
+		SvenPredictedSound( m_pPlayer, 5, 1.0f, CHAN_WEAPON );
+		if( m_iClip )
+			SvenPredictedSound( m_pPlayer, 6, 0.95f, CHAN_ITEM );
+	}
 
 	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
@@ -487,6 +503,7 @@ void CCrossbow::Reload( void )
 
 	if( DefaultReload( CROSSBOW_MAX_CLIP, CROSSBOW_RELOAD, 4.5f ) )
 	{
+		SvenPredictedSound( m_pPlayer, 6, 0.95f, CHAN_ITEM );
 		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/xbow_reload1.wav", RANDOM_FLOAT( 0.95f, 1.0f ), ATTN_NORM, 0, 93 + RANDOM_LONG( 0, 0xF ) );
 	}
 }

@@ -140,8 +140,8 @@ public:
 
 		m_iClip--;
 		const Vector cone = m_bLaser ? Cone( 0.0436f, 0.0349f, 0.02618f ) : Cone( 0.02618f, 0.01745f, 0.00873f );
-		const Vector dir = Shoot( 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, 0, 0, m_iClip == 0, 1 );
+		Shoot( 1, cone, 8192 );
+		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, 0, 0, m_iClip == 0, 1 );
 		m_flNextPrimaryAttack = Now() + ( m_bLaser ? 0.3f : 0.6f );
 		SetIdleDelay( 10, 15 );
 	}
@@ -235,8 +235,8 @@ public:
 		}
 
 		m_iClip--;
-		const Vector dir = Shoot( 1, Cone( 0.06105f, 0.0349f, 0.02618f ), 2048 );
-		Playback( FLAGS_PREDICTED, m_bBelt ? m_usLegacy : m_usFire, dir.x, dir.y, m_iClip, Body(), 0, 0 );
+		Shoot( 1, Cone( 0.06105f, 0.0349f, 0.02618f ), 2048 );
+		Playback( FLAGS_PREDICTED, m_bBelt ? m_usLegacy : m_usFire, 0, 0, m_iClip, Body(), 0, 0 );
 		SetAttackDelay( 0.08f );
 
 		// client.dll 0x1008f050: the view kick is applied here, not in the event.
@@ -305,8 +305,8 @@ public:
 		const bool lastRound = m_iClip == 1;
 		m_iClip--;
 		const Vector cone = m_bZoomed ? Cone( 0.00873f, 0, 0 ) : Cone( 0.07846f, 0.05234f, 0.02618f );
-		const Vector dir = Shoot( 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, lastRound, 0, m_bZoomed, 0 );
+		Shoot( 1, cone, 8192 );
+		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, lastRound, 0, m_bZoomed, 0 );
 		m_flNextPrimaryAttack = Now() + 1.8f;
 		SetIdleDelay( 10, 15 );
 	}
@@ -373,8 +373,8 @@ class CSvenM16 : public CSvenWeapon
 	void FireBurstShot( void )
 	{
 		const bool first = m_flBurst == BURST_SHOTS;
-		const Vector dir = Shoot( 1, Cone( 0.05234f, 0.0349f, 0.02618f ), 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, m_iClip, first, 0, 0 );
+		Shoot( 1, Cone( 0.05234f, 0.0349f, 0.02618f ), 8192 );
+		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, m_iClip, first, 0, 0 );
 		m_iClip--;
 		m_flBurst -= 1.0f;
 		m_flNextSecondaryAttack += 0.07f;
@@ -481,8 +481,8 @@ class CSvenUzi : public CSvenWeapon
 		}
 
 		const Vector cone = m_bAkimbo ? Cone( 0.08716f, 0.06976f, 0.06105f ) : Cone( 0.05234f, 0.0349f, 0.02618f );
-		const Vector dir = Shoot( mode == FIRE_BOTH ? 2 : 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_bAkimbo ? m_usAkimbo : m_usFire, dir.x, dir.y, anim, 0, 0, 0 );
+		Shoot( mode == FIRE_BOTH ? 2 : 1, cone, 8192 );
+		Playback( FLAGS_PREDICTED, m_bAkimbo ? m_usAkimbo : m_usFire, 0, 0, anim, 0, 0, 0 );
 
 		if( mode == FIRE_BOTH || mode == FIRE_RIGHT_ONLY || mode == FIRE_LEFT_ONLY )
 			m_iClip = Q_max( m_iClip - 1, 0 );
@@ -613,9 +613,9 @@ public:
 			return;
 		}
 
-		const Vector dir = Shoot( 2, Cone( 0.08716f, 0.06105f, 0.04362f ), 4096 );
+		Shoot( 2, Cone( 0.08716f, 0.06105f, 0.04362f ), 4096 );
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, 0, 0, 0, 0 );
+		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, 0, 0, 0, 0 );
 		if( m_pPlayer->pev->weaponanim != ANIM_FIRE )
 			SendWeaponAnim( ANIM_FIRE );
 		m_flNextPrimaryAttack += 0.06f;
@@ -924,6 +924,14 @@ CSvenWeapon *FindSvenWeapon( int id )
 	}
 	return NULL;
 }
+}
+
+void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay )
+{
+	if( !g_bSvenLocalWeapons )
+		return;
+	const unsigned short eventIndex = PRECACHE_EVENT( 1, "events/clcheck.sc" );
+	PLAYBACK_EVENT_FULL( FEV_NOTHOST, player->edict(), eventIndex, delay, g_vecZero, g_vecZero, (float)sound, volume, 2, channel, 0, 0 );
 }
 
 void SvenWeapons_Prepare( CBasePlayer *owner )

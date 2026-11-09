@@ -178,7 +178,7 @@ void CMP5::PrimaryAttack()
 #else
 	flags = 0;
 #endif
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, vecDir.x, vecDir.y, 0, 0, 0, 0 );
+	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
 
 	if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		// HEV suit - indicate out of ammo condition
@@ -233,6 +233,12 @@ void CMP5::SecondaryAttack( void )
 	flags = 0;
 #endif
 	PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usMP52 );
+
+	if( g_bSvenLocalWeapons )
+	{
+		SendWeaponAnim( MP5_LAUNCH );
+		SvenPredictedSound( m_pPlayer, 2 + RANDOM_LONG( 0, 1 ), 0.8f, CHAN_WEAPON );
+	}
 
 	m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0f;

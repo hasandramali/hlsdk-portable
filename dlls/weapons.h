@@ -1001,4 +1001,17 @@ public:
 private:
 	unsigned short m_usSnarkFire;
 };
+#if CLIENT_DLL
+// cl_lw 1 against a Sven server.
+extern int g_bSvenLocalWeapons;
+void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay = 0.0f );
+#else
+#define g_bSvenLocalWeapons 0
+#define SvenPredictedSound( ... )
+#endif
+
+// client.dll sends no spread with its own fire events: tracers and decals
+// are centred, and only the server decides where the bullet really lands.
+#define EVENT_SPREAD( value ) ( g_bSvenLocalWeapons ? 0.0f : ( value ))
+
 #endif // WEAPONS_H

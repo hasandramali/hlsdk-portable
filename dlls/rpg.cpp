@@ -487,6 +487,13 @@ void CRpg::PrimaryAttack()
 #endif
 		PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usRpg );
 
+		if( g_bSvenLocalWeapons )
+		{
+			SendWeaponAnim( RPG_FIRE2 );
+			SvenPredictedSound( m_pPlayer, 1, 0.9f, CHAN_WEAPON );
+			SvenPredictedSound( m_pPlayer, 2, 0.7f, CHAN_ITEM );
+		}
+
 		m_iClip--; 
 
 		m_flNextPrimaryAttack = GetNextAttackDelay( 1.5f );
