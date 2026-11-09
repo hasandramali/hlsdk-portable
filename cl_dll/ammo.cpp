@@ -40,7 +40,7 @@ static bool LocalWeaponsEnabled( void )
 }
 
 // cl_lw 1: weapon_data is the server's own ownership list (client.dll 0x10003be0).
-void HUD_SyncWeaponInventory( const weapon_data_t *weapons, int count )
+extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int count )
 {
 	for( int id = 1; id < count && id < MAX_HUD_WEAPONS; id++ )
 	{
@@ -616,6 +616,39 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 
 	if( !LocalWeaponsEnabled() && !( gHUD.m_iWeaponBits & ~( 1 << ( WEAPON_SUIT ) ) ) )
 		return;
+
+	if( LocalWeaponsEnabled() )
+	{
+		WEAPON *p = NULL;
+		const bool fastSwitch = CVAR_GET_FLOAT( "hud_fastswitch" ) != 0;
+
+		if( !gpActiveSel || gpActiveSel == (WEAPON *)1 || iSlot != gpActiveSel->iSlot )
+		{
+			PlaySound( "common/wpn_hudon.wav", 1 );
+			p = GetFirstPos( iSlot );
+
+			if( p && fastSwitch && !GetNextActivePos( p->iSlot, p->iSlotPos ) )
+			{
+				// only one weapon in this slot: switch to it right away
+				ServerCmd( p->szName );
+				g_weaponselect = p->iId;
+				return;
+			}
+		}
+		else
+		{
+			PlaySound( "common/wpn_moveselect.wav", 1 );
+			p = GetNextActivePos( gpActiveSel->iSlot, gpActiveSel->iSlotPos );
+			if( !p )
+				p = GetFirstPos( iSlot );
+		}
+
+		if( p )
+			gpActiveSel = p;
+		else
+			gpActiveSel = fastSwitch ? NULL : (WEAPON *)1;
+		return;
+	}
 
 	// Sven-port fast-switch: a slot key selects IMMEDIATELY and never opens
 	// the top-left weapon sprite menu (full hud_fastswitch effect). The press

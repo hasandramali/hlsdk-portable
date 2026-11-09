@@ -47,6 +47,12 @@ static CBasePlayer player;
 static globalvars_t Globals; 
 
 static CBasePlayerWeapon *g_pWpns[MAX_WEAPONS];
+static int s_bEventsBound = 0;
+
+void HUD_ClientWeaponsNewLevel( void )
+{
+	s_bEventsBound = 0;
+}
 
 float g_flApplyVel = 0.0;
 int g_irunninggausspred = 0;
@@ -576,9 +582,22 @@ void HUD_InitClientWeapons( void )
 {
 	static int initialized = 0;
 	if( initialized )
+	{
+		// Event indices belong to one server's precache list.
+		if( !s_bEventsBound )
+		{
+			s_bEventsBound = 1;
+			for( int i = 0; i < MAX_WEAPONS; i++ )
+			{
+				if( g_pWpns[i] )
+					g_pWpns[i]->Precache();
+			}
+		}
 		return;
+	}
 
 	initialized = 1;
+	s_bEventsBound = 1;
 
 	// Set up pointer ( dummy object )
 	gpGlobals = &Globals;
@@ -1022,8 +1041,6 @@ runfuncs is 1 if this is the first time we've predicted this command.  If so, so
 be ignored
 =====================
 */
-void HUD_SyncWeaponInventory( const weapon_data_t *weapons, int count );
-
 void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s *to, struct usercmd_s *cmd, int runfuncs, double time, unsigned int random_seed )
 {
 	// Native Sven predicts this movement restriction even with cl_lw=0.
@@ -1036,8 +1053,6 @@ void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s
 #if CLIENT_WEAPONS
 	if( cl_lw && cl_lw->value )
 	{
-		if( runfuncs )
-			HUD_SyncWeaponInventory( from->weapondata, sizeof( from->weapondata ) / sizeof( from->weapondata[0] ));
 		HUD_WeaponsPostThink( from, to, cmd, time, random_seed );
 	}
 	else

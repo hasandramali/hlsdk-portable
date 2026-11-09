@@ -261,9 +261,12 @@ so the HUD can reinitialize itself.
 ==========================
 */
 
+void HUD_ClientWeaponsNewLevel( void );
+
 int DLLEXPORT HUD_VidInit( void )
 {
 	gHUD.VidInit();
+	HUD_ClientWeaponsNewLevel();
 #if USE_FAKE_VGUI
 	vgui::Panel* root=(vgui::Panel*)gEngfuncs.VGui_GetPanel();
 	if (root) {
