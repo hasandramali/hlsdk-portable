@@ -84,6 +84,7 @@ void EV_ShockFire( struct event_args_s *args );
 void EV_ShockBeam( struct event_args_s *args );
 void EV_FireSniper( struct event_args_s *args );
 void EV_SporeFire( struct event_args_s *args );
+void EV_ClCheck( struct event_args_s *args );
 
 void EV_TrainPitchAdjust( struct event_args_s *args );
 void EV_VehiclePitchAdjust( event_args_t *args );
