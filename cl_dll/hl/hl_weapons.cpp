@@ -684,9 +684,8 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	// FIXME, make this a method in each weapon?  where you pass in an entity_state_t *?
 	switch( from->client.m_iId )
 	{
-		case WEAPON_CROWBAR:
-			pWeapon = &g_Crowbar;
-			break;
+		// client.dll 0x1002cdcf: Sven predicts only ids 2-4, 6-9, 11, 12, 14, 17,
+		// 21 and 23-29. The server animates and plays the others itself.
 		case WEAPON_GLOCK:
 			pWeapon = &g_Glock;
 			break;
@@ -708,9 +707,6 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		case WEAPON_GAUSS:
 			pWeapon = &g_Gauss;
 			break;
-		case WEAPON_EGON:
-			pWeapon = &g_Egon;
-			break;
 		case WEAPON_HORNETGUN:
 			pWeapon = &g_HGun;
 			break;
@@ -719,12 +715,6 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 			break;
 		case WEAPON_SATCHEL:
 			pWeapon = &g_Satchel;
-			break;
-		case WEAPON_TRIPMINE:
-			pWeapon = &g_Tripmine;
-			break;
-		case WEAPON_SNARK:
-			pWeapon = &g_Snark;
 			break;
 	}
 
@@ -1032,6 +1022,8 @@ runfuncs is 1 if this is the first time we've predicted this command.  If so, so
 be ignored
 =====================
 */
+void HUD_SyncWeaponInventory( const weapon_data_t *weapons, int count );
+
 void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s *to, struct usercmd_s *cmd, int runfuncs, double time, unsigned int random_seed )
 {
 	// Native Sven predicts this movement restriction even with cl_lw=0.
@@ -1044,6 +1036,8 @@ void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s
 #if CLIENT_WEAPONS
 	if( cl_lw && cl_lw->value )
 	{
+		if( runfuncs )
+			HUD_SyncWeaponInventory( from->weapondata, sizeof( from->weapondata ) / sizeof( from->weapondata[0] ));
 		HUD_WeaponsPostThink( from, to, cmd, time, random_seed );
 	}
 	else

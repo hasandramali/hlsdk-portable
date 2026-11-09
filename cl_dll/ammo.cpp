@@ -30,6 +30,31 @@
 #include <limits.h>
 
 #include "ammohistory.h"
+#include "weaponinfo.h"
+
+extern cvar_t *cl_lw;
+
+static bool LocalWeaponsEnabled( void )
+{
+	return cl_lw && cl_lw->value != 0.0f;
+}
+
+// cl_lw 1: weapon_data is the server's own ownership list (client.dll 0x10003be0).
+void HUD_SyncWeaponInventory( const weapon_data_t *weapons, int count )
+{
+	for( int id = 1; id < count && id < MAX_HUD_WEAPONS; id++ )
+	{
+		WEAPON *weapon = gWR.GetWeapon( id );
+		const unsigned char owned = weapons[id].m_iId == id;
+		if( !weapon->iId || owned == gWR.bSynced[id] )
+			continue;
+		gWR.bSynced[id] = owned;
+		if( owned )
+			gWR.PickupWeapon( weapon );
+		else
+			gWR.DropWeapon( weapon );
+	}
+}
 #if USE_VGUI
 #include "vgui_TeamFortressViewport.h"
 #endif
@@ -506,7 +531,8 @@ void CHudAmmo::Think( void )
 	if( gHUD.m_fPlayerDead )
 		return;
 
-	if( gHUD.m_iWeaponBits != gWR.iOldWeaponBits )
+	// Sven never fills clientdata.weapons; with cl_lw 1 weapon_data owns this.
+	if( !LocalWeaponsEnabled() && gHUD.m_iWeaponBits != gWR.iOldWeaponBits )
 	{
 		gWR.iOldWeaponBits = gHUD.m_iWeaponBits;
 
@@ -588,7 +614,7 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 	if ( !( gHUD.m_iWeaponBits & ( 1 << ( WEAPON_SUIT ) ) ) )
 		return;
 
-	if( ! ( gHUD.m_iWeaponBits & ~( 1 << ( WEAPON_SUIT ) ) ) )
+	if( !LocalWeaponsEnabled() && !( gHUD.m_iWeaponBits & ~( 1 << ( WEAPON_SUIT ) ) ) )
 		return;
 
 	// Sven-port fast-switch: a slot key selects IMMEDIATELY and never opens
@@ -1163,12 +1189,8 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	if( Weapon.iId < 0 || Weapon.iId >= MAX_HUD_WEAPONS )
 		return 0;
 
-	// Sven servers number slots 0..9+ (tall layout) while the vanilla HUD
-	// prints buckets 0..4 (rgSlots has 6 rows). WeaponList must register the
-	// weapon regardless of its slot: rejecting slot 6..9 weapons meant the
-	// minigun (9-1, id 21) and shockroach never entered the inventory, so
-	// their ammo type/max were unknown, the reserve counter stayed at 0 and
-	// the bottom-right HUD read 00. Fold the same way PickupWeapon does.
+	// WeaponList must register the weapon whatever its slot: a rejected
+	// weapon leaves its ammo type unknown and the reserve counter at 00.
 	if( Weapon.iSlot < 0 ) Weapon.iSlot = 0;
 	if( Weapon.iSlot >= MAX_WEAPON_SLOTS ) Weapon.iSlot = MAX_WEAPON_SLOTS - 1;
 	if( Weapon.iSlotPos < 0 ) Weapon.iSlotPos = 0;
@@ -1638,10 +1660,15 @@ int CHudAmmo::DrawWList( float flTime )
 		}
 	}
 
+	const int iVisibleSlots = gWR.VisibleSlots();
+
 	// Draw top line
 	for( i = 0; i < MAX_WEAPON_SLOTS; i++ )
 	{
 		int iWidth;
+
+		if( i >= iVisibleSlots && i != iActiveSlot )
+			continue;
 
 		UnpackRGB( r, g, b, RGB_BLUEISH );
 
@@ -1668,7 +1695,11 @@ int CHudAmmo::DrawWList( float flTime )
 		else
 			iWidth = giBucketWidth;
 
-		gHUD.DrawSprite( x, y, gHUD.GetSprite( m_HUD_bucket0 + i ), &gHUD.GetSpriteRect( m_HUD_bucket0 + i ), r, g, b, 0, SPR_ADDITIVE );
+		char szBucket[16];
+		snprintf( szBucket, sizeof( szBucket ), "bucket%d", i + 1 );
+		const int iBucket = gHUD.GetSpriteIndex( szBucket );
+		if( iBucket >= 0 )
+			gHUD.DrawSprite( x, y, gHUD.GetSprite( iBucket ), &gHUD.GetSpriteRect( iBucket ), r, g, b, 0, SPR_ADDITIVE );
 		
 		x += iWidth + 5;
 	}
@@ -1679,6 +1710,9 @@ int CHudAmmo::DrawWList( float flTime )
 	// Draw all of the buckets
 	for( i = 0; i < MAX_WEAPON_SLOTS; i++ )
 	{
+		if( i >= iVisibleSlots && i != iActiveSlot )
+			continue;
+
 		y = giBucketHeight + 10;
 
 		// If this is the active slot, draw the bigger pictures,

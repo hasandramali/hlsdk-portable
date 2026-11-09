@@ -20,7 +20,7 @@
 #define AMMOHISTORY_H
 
 // this is the max number of items in each bucket
-#define MAX_WEAPON_POSITIONS		MAX_WEAPON_SLOTS
+#define MAX_WEAPON_POSITIONS		26
 
 class WeaponsResource
 {
@@ -44,12 +44,27 @@ public:
 		iOldWeaponBits = 0;
 		memset( rgSlots, 0, sizeof rgSlots );
 		memset( riAmmo, 0, sizeof riAmmo );
+		memset( bSynced, 0, sizeof bSynced );
 	}
 
 ///// WEAPON /////
 	int			iOldWeaponBits;
+	unsigned char	bSynced[MAX_HUD_WEAPONS];	// cl_lw 1: ownership last taken from weapon_data
 
 	WEAPON *GetWeapon( int iId ) { return &rgWeapons[iId]; }
+
+	// Sven client.dll 0x10003cd7: the highest used bucket, excluding bucket 9,
+	// decides how many are shown, from 6 up to 10.
+	int VisibleSlots( void ) const
+	{
+		int count = 6;
+		for( int i = 0; i < MAX_HUD_WEAPONS; i++ )
+		{
+			if( rgWeapons[i].iId && rgWeapons[i].iSlot != 9 && rgWeapons[i].iSlot + 1 > count )
+				count = rgWeapons[i].iSlot + 1;
+		}
+		return count > 10 ? 10 : count;
+	}
 	void AddWeapon( WEAPON *wp ) 
 	{ 
 		rgWeapons[wp->iId] = *wp;	
@@ -58,11 +73,8 @@ public:
 
 	void PickupWeapon( WEAPON *wp )
 	{
-		// Sven servers number slots 0..9+ (tall layout) but the vanilla menu
-		// draws buckets 0..4 and rgSlots has 6 rows. Fold higher slots into
-		// the last visible bucket and clamp positions: without this, exotic
-		// weapons (slot 6+) wrote past rgSlots into riAmmo, corrupting ammo
-		// counts into 99999-like values and hiding the weapons from the menu.
+		// Clamp out-of-range server values: writing past rgSlots would land
+		// in riAmmo and corrupt the ammo counts.
 		int b = wp->iSlot;
 		int p, k;
 		if( b < 0 ) b = 0;
@@ -104,6 +116,7 @@ public:
 			if( rgWeapons[i].iId )
 				DropWeapon( &rgWeapons[i] );
 		}
+		memset( bSynced, 0, sizeof bSynced );
 	}
 
 	WEAPON* GetWeaponSlot( int slot, int pos ) { return rgSlots[slot][pos]; }
