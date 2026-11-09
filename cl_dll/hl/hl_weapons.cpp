@@ -49,9 +49,17 @@ static globalvars_t Globals;
 static CBasePlayerWeapon *g_pWpns[MAX_WEAPONS];
 static int s_bEventsBound = 0;
 
+int g_bSvenLocalWeapons = 0;
+int HUD_WeaponSecondaryAmmoType( int id );
+void SvenWeapons_Prepare( CBasePlayer *owner );
+CBasePlayerWeapon *SvenWeapons_Find( int id );
+void SvenWeapons_Decode( int id, const weapon_data_t *data );
+void SvenWeapons_Encode( int id, weapon_data_t *data );
+
 void HUD_ClientWeaponsNewLevel( void )
 {
 	s_bEventsBound = 0;
+	g_bSvenLocalWeapons = 0;
 }
 
 float g_flApplyVel = 0.0;
@@ -640,6 +648,7 @@ void HUD_InitClientWeapons( void )
 	HUD_PrepEntity( &g_Satchel, &player );
 	HUD_PrepEntity( &g_Tripmine, &player );
 	HUD_PrepEntity( &g_Snark, &player );
+	SvenWeapons_Prepare( &player );
 }
 
 /*
@@ -678,6 +687,130 @@ void HUD_SetLastOrg( void )
 	}
 }
 
+static bool SvenSendsAmmoInUser( int id )
+{
+	switch( id )
+	{
+	case 2: case 3: case 4: case 6: case 7: case 9: case 11: case 12: case 14:
+	case 17: case 21: case 23: case 24: case 25: case 26: case 27: case 28: case 29:
+		return true;
+	}
+	return false;
+}
+
+static bool SvenSendsSecondaryInUser( int id )
+{
+	return id == 7 || id == 9 || id == 11 || id == 12 || id == 14;
+}
+
+static bool SvenValidAmmo( int type )
+{
+	return type >= 0 && type < MAX_AMMO_SLOTS;
+}
+
+// client.dll vtable +0x290: each Sven weapon stores its state in its own
+// iuser/fuser fields, not the ones HL uses.
+static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapon_data_t *data )
+{
+	if( SvenSendsAmmoInUser( id ))
+	{
+		weapon->m_chargeReady = weapon->m_fInAttack = weapon->m_fireState = 0;
+		if( SvenValidAmmo( data->iuser1 ))
+		{
+			weapon->m_iPrimaryAmmoType = data->iuser1;
+			player.m_rgAmmo[data->iuser1] = data->iuser2;
+		}
+	}
+
+	if( SvenSendsSecondaryInUser( id ) && SvenValidAmmo( data->iuser3 ))
+	{
+		weapon->m_iSecondaryAmmoType = data->iuser3;
+		player.m_rgAmmo[data->iuser3] = data->iuser4;
+	}
+
+	switch( id )
+	{
+	case WEAPON_GLOCK:
+		if( data->m_fInZoom )
+			weapon->pev->body = data->m_iWeaponState; // silencer
+		break;
+	case WEAPON_MP5:
+	{
+		const int type = HUD_WeaponSecondaryAmmoType( id );
+		if( SvenValidAmmo( type ))
+		{
+			weapon->m_iSecondaryAmmoType = type;
+			player.m_rgAmmo[type] = data->iuser3;
+		}
+		break;
+	}
+	case WEAPON_SHOTGUN:
+		static_cast<CShotgun *>( weapon )->m_flNextReload = data->fuser1;
+		weapon->m_fInSpecialReload = (int)data->fuser4;
+		break;
+	case WEAPON_GAUSS:
+		weapon->m_fInAttack = (int)data->fuser4;
+		break;
+	case WEAPON_HANDGRENADE:
+		weapon->m_flStartThrow = data->fuser1;
+		weapon->m_flReleaseThrow = data->fuser2;
+		break;
+	case WEAPON_SATCHEL:
+		weapon->m_chargeReady = (int)data->fuser1;
+		break;
+	default:
+		SvenWeapons_Decode( id, data );
+		break;
+	}
+}
+
+// client.dll vtable +0x28c: the same layout, written back for the next command.
+static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data_t *data )
+{
+	if( SvenSendsAmmoInUser( id ))
+	{
+		data->iuser1 = weapon->m_iPrimaryAmmoType;
+		data->iuser2 = SvenValidAmmo( weapon->m_iPrimaryAmmoType ) ? player.m_rgAmmo[weapon->m_iPrimaryAmmoType] : 0;
+	}
+
+	if( SvenSendsSecondaryInUser( id ))
+	{
+		data->iuser3 = weapon->m_iSecondaryAmmoType;
+		data->iuser4 = SvenValidAmmo( weapon->m_iSecondaryAmmoType ) ? player.m_rgAmmo[weapon->m_iSecondaryAmmoType] : 0;
+	}
+
+	switch( id )
+	{
+	case WEAPON_MP5:
+		data->iuser3 = SvenValidAmmo( weapon->m_iSecondaryAmmoType ) ? player.m_rgAmmo[weapon->m_iSecondaryAmmoType] : 0;
+		break;
+	case WEAPON_SHOTGUN:
+		data->fuser1 = static_cast<CShotgun *>( weapon )->m_flNextReload;
+		data->fuser4 = weapon->m_fInSpecialReload;
+		break;
+	case WEAPON_GAUSS:
+		data->fuser1 = player.m_flNextAmmoBurn;
+		data->fuser2 = player.m_flStartCharge;
+		data->fuser3 = player.m_flPlayAftershock;
+		data->fuser4 = weapon->m_fInAttack;
+		break;
+	case WEAPON_HANDGRENADE:
+		data->fuser1 = weapon->m_flStartThrow;
+		data->fuser2 = weapon->m_flReleaseThrow;
+		break;
+	}
+}
+
+// fuser1 is counted down each command, which would corrupt the whole-number
+// states kept in it, so these are written after the countdown.
+static void SvenEncodeWholeNumberStates( int id, CBasePlayerWeapon *weapon, weapon_data_t *data )
+{
+	if( id == WEAPON_SATCHEL )
+		data->fuser1 = weapon->m_chargeReady;
+	else
+		SvenWeapons_Encode( id, data );
+}
+
 /*
 =====================
 HUD_WeaponsPostThink
@@ -701,6 +834,8 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 
 	// Fill in data based on selected weapon
 	// FIXME, make this a method in each weapon?  where you pass in an entity_state_t *?
+	pWeapon = SvenWeapons_Find( from->client.m_iId );
+
 	switch( from->client.m_iId )
 	{
 		// client.dll 0x1002cdcf: Sven predicts only ids 2-4, 6-9, 11, 12, 14, 17,
@@ -790,6 +925,9 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		pCurrent->m_iPrimaryAmmoType = (int)from->client.vuser4[0];
 		player.m_rgAmmo[pCurrent->m_iPrimaryAmmoType] = (int)from->client.vuser4[1];
 		player.m_rgAmmo[pCurrent->m_iSecondaryAmmoType] = (int)from->client.vuser4[2];
+
+		if( g_bSvenLocalWeapons )
+			SvenDecodeWeaponData( i, pCurrent, pfrom );
 	}
 
 	// For random weapon events, use this seed to seed random # generator
@@ -822,6 +960,16 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	player.m_flNextAttack = from->client.m_flNextAttack;
 	player.m_flNextAmmoBurn = from->client.fuser2;
 	player.m_flAmmoStartCharge = from->client.fuser3;
+
+	if( g_bSvenLocalWeapons )
+	{
+		// Gauss charge lives in its own weapon record on Sven.
+		const weapon_data_t *gauss = &from->weapondata[WEAPON_GAUSS];
+		player.m_flNextAmmoBurn = gauss->fuser1;
+		player.m_flStartCharge = gauss->fuser2;
+		player.m_flPlayAftershock = gauss->fuser3;
+		player.m_flAmmoStartCharge = ( gauss->fuser2 - gpGlobals->time ) + ( bIsMultiplayer() ? 1.5f : 4.0f );
+	}
 
 	//Stores all our ammo info, so the client side weapons can use them.
 	player.ammo_9mm = (int)from->client.vuser1[0];
@@ -953,6 +1101,9 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		pto->iuser2 = pCurrent->m_fInAttack;
 		pto->iuser3 = pCurrent->m_fireState;
 
+		if( g_bSvenLocalWeapons )
+			SvenEncodeWeaponData( i, pCurrent, pto );
+
 		// Decrement weapon counters, server does this at same time ( during post think, after doing everything else )
 		pto->m_flNextReload -= cmd->msec / 1000.0f;
 		pto->m_fNextAimBonus -= cmd->msec / 1000.0f;
@@ -1002,6 +1153,9 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		{
 			pto->fuser1 = -0.001f;
 		}
+
+		if( g_bSvenLocalWeapons )
+			SvenEncodeWholeNumberStates( i, pCurrent, pto );
 	}
 
 	// m_flNextAttack is now part of the weapons, but is part of the player instead

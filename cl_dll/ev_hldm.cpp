@@ -2433,6 +2433,77 @@ enum sporelauncher_e
 	SPLAUNCHER_IDLE2
 };
 
+// Sven client.dll 0x1001f9c0. The server names weapon sounds by number here
+// so cl_lw 1 clients still get the ones the client code never plays.
+void EV_ClCheck( event_args_t *args )
+{
+	static const struct { const char *sample; bool classic; } sounds[] =
+	{
+		{ "weapons/357_cock1.wav", true },
+		{ "weapons/rocketfire1.wav", true },
+		{ "weapons/glauncher.wav", true },
+		{ "weapons/glauncher2.wav", true },
+		{ "weapons/357_reload1.wav", true },
+		{ "weapons/xbow_fire1.wav", true },
+		{ "weapons/xbow_reload1.wav", true },
+		{ "common/null.wav", false },
+		{ "weapons/electro4.wav", true },
+		{ "weapons/electro5.wav", true },
+		{ "weapons/electro6.wav", true },
+		{ "agrunt/ag_fire1.wav", false },
+		{ "agrunt/ag_fire2.wav", false },
+		{ "agrunt/ag_fire3.wav", false },
+		{ "weapons/dbarrel1.wav", true },
+		{ "weapons/sbarrel1.wav", true },
+		{ "weapons/reload1.wav", true },
+		{ "weapons/reload3.wav", true },
+		{ "misc/bbcover.wav", false },
+		{ "weapons/scock1.wav", true },
+		{ "weapons/sniper_zoom.wav", false },
+		{ "weapons/desert_eagle_sight.wav", false },
+		{ "weapons/desert_eagle_sight2.wav", false },
+		{ "weapons/splauncher_fire.wav", false },
+		{ "weapons/splauncher_altfire.wav", false },
+	};
+	enum { SOUND_SHOTGUN_COCK = 19 };
+
+	const char *sample = "weapons/357_cock1.wav";
+	bool classic = true;
+	float volume = 1.0f;
+
+	if( args->iparam1 == 2 )
+	{
+		const int index = (int)args->fparam1;
+		if( index >= 0 && index < (int)( sizeof( sounds ) / sizeof( sounds[0] )))
+		{
+			sample = sounds[index].sample;
+			classic = sounds[index].classic;
+		}
+		volume = args->fparam2;
+
+		if( index == SOUND_SHOTGUN_COCK && !args->bparam2 )
+		{
+			vec3_t ShellVelocity, ShellOrigin, forward, right, up;
+			AngleVectors( args->angles, forward, right, up );
+			EV_GetDefaultShellInfo( args, args->origin, args->velocity, ShellVelocity, ShellOrigin, forward, right, up, 16, -25, 6 );
+			const int shell = gEngfuncs.pEventAPI->EV_FindModelIndex( gHUD.m_bClassicMode ? "models/hlclassic/shotgunshell.mdl" : "models/shotgunshell.mdl" );
+			EV_EjectBrass( ShellOrigin, ShellVelocity, args->angles[YAW], shell, TE_BOUNCE_SHOTSHELL );
+		}
+	}
+	else if( args->iparam1 != 1 )
+		return;
+
+	char path[128];
+	if( classic && gHUD.m_bClassicMode )
+	{
+		snprintf( path, sizeof( path ), "hlclassic/%s", sample );
+		sample = path;
+	}
+
+	gEngfuncs.pEventAPI->EV_PlaySound( args->entindex, args->origin, args->iparam2, sample,
+		volume, 0.8f, 0, 94 + gEngfuncs.pfnRandomLong( 0, 15 ));
+}
+
 void EV_SporeFire( event_args_t *args )
 {
 	int idx;

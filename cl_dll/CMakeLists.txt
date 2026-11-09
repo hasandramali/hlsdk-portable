@@ -82,6 +82,7 @@ set (CLDLL_SOURCES
 	hl/hl_events.cpp
 	hl/hl_objects.cpp
 	hl/hl_weapons.cpp
+	hl/sven_weapons.cpp
 	sven_ui.cpp
 	sven_effects.cpp
 	ammo.cpp

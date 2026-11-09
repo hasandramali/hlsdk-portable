@@ -40,8 +40,18 @@ static bool LocalWeaponsEnabled( void )
 }
 
 // cl_lw 1: weapon_data is the server's own ownership list (client.dll 0x10003be0).
+extern int g_bSvenLocalWeapons;
+
+// The ammo types of Sven weapons that do not send them in weapon_data.
+int HUD_WeaponSecondaryAmmoType( int id )
+{
+	return gWR.GetWeapon( id )->iAmmo2Type;
+}
+
 extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int count )
 {
+	g_bSvenLocalWeapons = 1;
+
 	for( int id = 1; id < count && id < MAX_HUD_WEAPONS; id++ )
 	{
 		WEAPON *weapon = gWR.GetWeapon( id );

@@ -53,6 +53,7 @@ void EV_ShockFire( struct event_args_s *args );
 void EV_ShockBeam( struct event_args_s *args );
 void EV_FireSniper( struct event_args_s *args );
 void EV_SporeFire( struct event_args_s *args );
+void EV_ClCheck( struct event_args_s *args );
 
 void EV_TrainPitchAdjust( struct event_args_s *args );
 void EV_VehiclePitchAdjust( event_args_t *args );
@@ -76,6 +77,9 @@ void EV_WeaponCustom( struct event_args_s *args );
 void Game_HookEvents( void )
 {
 	gEngfuncs.pfnHookEvent( "events/weapon_custom.sc", EV_WeaponCustom );
+	gEngfuncs.pfnHookEvent( "events/clcheck.sc", EV_ClCheck );
+	gEngfuncs.pfnHookEvent( "events/sporelauncher.sc", EV_SporeFire );
+	gEngfuncs.pfnHookEvent( "events/m249_LEGACY.sc", EV_FireM249 );
 	gEngfuncs.pfnHookEvent( "events/glock1.sc", EV_FireGlock1 );
 	gEngfuncs.pfnHookEvent( "events/glock2.sc", EV_FireGlock2 );
 	gEngfuncs.pfnHookEvent( "events/shotgun1.sc", EV_FireShotGunSingle );
