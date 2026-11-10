@@ -41,6 +41,7 @@ static bool LocalWeaponsEnabled( void )
 
 // cl_lw 1: weapon_data is the server's own ownership list (client.dll 0x10003be0).
 extern int g_bSvenLocalWeapons;
+extern WEAPON *gpActiveSel, *gpLastSel;
 
 // The ammo types of Sven weapons that do not send them in weapon_data.
 int HUD_WeaponSecondaryAmmoType( int id )
@@ -66,7 +67,14 @@ extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int 
 		if( owned )
 			gWR.PickupWeapon( weapon );
 		else
+		{
 			gWR.DropWeapon( weapon );
+			// a menu still pointing at a weapon that is gone swallows slot keys
+			if( gpActiveSel == weapon )
+				gpActiveSel = NULL;
+			if( gpLastSel == weapon )
+				gpLastSel = NULL;
+		}
 	}
 }
 #if USE_VGUI
@@ -503,6 +511,16 @@ int CHudAmmo::VidInit( void )
 //
 void CHudAmmo::Think( void )
 {
+	// Switching cl_lw changes who owns the inventory; start it over so the
+	// weapon_data sync re-adds everything instead of trusting stale state.
+	static int s_iLastLocalWeapons = -1;
+	if( s_iLastLocalWeapons != (int)LocalWeaponsEnabled() )
+	{
+		s_iLastLocalWeapons = (int)LocalWeaponsEnabled();
+		gWR.DropAllWeapons();
+		gpActiveSel = gpLastSel = NULL;
+	}
+
 	// Gauss spin failsafe (proedu): the pulsemachine loop is ONLY legitimate
 	// while +attack2 is held (charging). Any loop with attack2 released is
 	// stale by definition: a missed server stop event, a late spin-restart
@@ -612,6 +630,11 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 {
 	// Server-driven menus (e.g. /buy) override slot keys entirely, so keep
 	// this branch first: with SelectSlot enabled the menu becomes usable.
+	// cl_goldsrc_debug 1: why a slot key did nothing.
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+		gEngfuncs.Con_Printf( "HUD-SLOT: key=%d menu=%d dead=%d hide=%d suit=%d\n", iSlot, gHUD.m_Menu.m_fMenuDisplayed,
+			gHUD.m_fPlayerDead, gHUD.m_iHideHUDDisplay, ( gHUD.m_iWeaponBits & ( 1 << WEAPON_SUIT )) != 0 );
+
 	if( gHUD.m_Menu.m_fMenuDisplayed && ( fAdvance  == FALSE ) && ( iDirection == 1 ) )	
 	{
 		// menu is overriding slot use commands
@@ -634,6 +657,10 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 	if( LocalWeaponsEnabled() )
 	{
 		WEAPON *p = NULL;
+		if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1.0f )
+			gEngfuncs.Con_Printf( "HUD-SLOT: slot=%d first=%d active=%d\n", iSlot,
+				GetFirstPos( iSlot ) ? GetFirstPos( iSlot )->iId : 0,
+				gpActiveSel && gpActiveSel != (WEAPON *)1 ? gpActiveSel->iId : (int)( gpActiveSel != NULL ));
 		const bool fastSwitch = CVAR_GET_FLOAT( "hud_fastswitch" ) != 0;
 
 		if( !gpActiveSel || gpActiveSel == (WEAPON *)1 || iSlot != gpActiveSel->iSlot )
@@ -756,7 +783,9 @@ int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 	// Top-left text notifier (menu closed) or green menu highlight (menu open).
 	// WeapPickup itself is only sent for genuine ground pickups, so a weapon
 	// the player already holds never triggers anything here.
-	OnWeaponPickup( iIndex );
+	// The top-left pickup notice belongs to the cl_lw 0 inventory.
+	if( !LocalWeaponsEnabled() )
+		OnWeaponPickup( iIndex );
 
 	return 1;
 }

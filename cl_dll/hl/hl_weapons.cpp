@@ -762,6 +762,10 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 	case WEAPON_SATCHEL:
 		weapon->m_chargeReady = (int)data->fuser1;
 		break;
+	case WEAPON_HORNETGUN:
+		static_cast<CHgun *>( weapon )->m_iFirePhase = (int)data->fuser1;
+		static_cast<CHgun *>( weapon )->m_flRechargeTime = (float)gpGlobals->time + data->fuser2;
+		break;
 	default:
 		SvenWeapons_Decode( id, data );
 		break;
@@ -802,6 +806,9 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		data->fuser1 = weapon->m_flStartThrow;
 		data->fuser2 = weapon->m_flReleaseThrow;
 		break;
+	case WEAPON_HORNETGUN:
+		data->fuser2 = static_cast<CHgun *>( weapon )->m_flRechargeTime - s_flSvenCommandEnd;
+		break;
 	}
 }
 
@@ -811,6 +818,8 @@ static void SvenEncodeWholeNumberStates( int id, CBasePlayerWeapon *weapon, weap
 {
 	if( id == WEAPON_SATCHEL )
 		data->fuser1 = weapon->m_chargeReady;
+	else if( id == WEAPON_HORNETGUN )
+		data->fuser1 = static_cast<CHgun *>( weapon )->m_iFirePhase;
 	else if( id == WEAPON_GAUSS )
 	{
 		if( player.m_flNextAmmoBurn >= GAUSS_NO_AMMO_BURN )
@@ -1206,6 +1215,8 @@ runfuncs is 1 if this is the first time we've predicted this command.  If so, so
 be ignored
 =====================
 */
+void HUD_ApplyPredictedFOV( int fov );
+
 void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s *to, struct usercmd_s *cmd, int runfuncs, double time, unsigned int random_seed )
 {
 	// Native Sven predicts this movement restriction even with cl_lw=0.
@@ -1236,4 +1247,8 @@ void _DLLEXPORT HUD_PostRunCmd( struct local_state_s *from, struct local_state_s
 
 	// All games can use FOV state
 	g_lastFOV = to->client.fov;
+
+	// A Sven server leaves the zoom to cl_lw 1 clients and sends no SetFOV.
+	if( g_bSvenLocalWeapons && cl_lw && cl_lw->value && runfuncs )
+		HUD_ApplyPredictedFOV( (int)to->client.fov );
 }

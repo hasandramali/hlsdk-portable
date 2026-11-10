@@ -173,6 +173,15 @@ void CHgun::PrimaryAttack()
 		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.25f;
 	}
 
+	if( g_bSvenLocalWeapons )
+	{
+		// client.dll 0x1008d020: refire from now, hold the regen and keep idle
+		// animations from cutting into the shot.
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.25f;
+		m_flRechargeTime = gpGlobals->time + 0.5f;
+		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+	}
+
 	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
 }
 

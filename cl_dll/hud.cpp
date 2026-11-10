@@ -859,8 +859,22 @@ float HUD_GetFOV( void )
 int CHud::MsgFunc_SetFOV( const char *pszName,  int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );
+	ApplyFOV( READ_BYTE() );
+	return 1;
+}
 
-	int newfov = READ_BYTE();
+static int s_iPredictedFOV = -1;
+
+void HUD_ApplyPredictedFOV( int fov )
+{
+	if( fov == s_iPredictedFOV )
+		return;
+	s_iPredictedFOV = fov;
+	gHUD.ApplyFOV( fov );
+}
+
+void CHud::ApplyFOV( int newfov )
+{
 	int def_fov = CVAR_GET_FLOAT( "default_fov" );
 
 	g_lastFOV = newfov;
@@ -888,7 +902,6 @@ int CHud::MsgFunc_SetFOV( const char *pszName,  int iSize, void *pbuf )
 		m_flMouseSensitivity = sensitivity->value * ((float)newfov / (float)def_fov) * CVAR_GET_FLOAT("zoom_sensitivity_ratio");
 	}
 
-	return 1;
 }
 
 void CHud::AddHudElem( CHudBase *phudelem )

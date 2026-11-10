@@ -768,6 +768,7 @@ public:
 
 	void _cdecl MsgFunc_ViewMode( const char *pszName, int iSize, void *pbuf );
 	int _cdecl MsgFunc_SetFOV( const char *pszName,  int iSize, void *pbuf );
+	void ApplyFOV( int fov );
 	int  _cdecl MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf );
 	int _cdecl MsgFunc_ClassicMode( const char *pszName, int iSize, void *pbuf );
 

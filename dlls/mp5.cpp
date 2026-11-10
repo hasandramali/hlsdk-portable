@@ -178,7 +178,8 @@ void CMP5::PrimaryAttack()
 #else
 	flags = 0;
 #endif
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
+	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, EVENT_SPREAD_CONE( vecDir.x, m_pPlayer, 0.0349f, 0.02618f, 0.01745f ),
+		EVENT_SPREAD_CONE( vecDir.y, m_pPlayer, 0.0349f, 0.02618f, 0.01745f ), 0, 0, 0, 0 );
 
 	if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		// HEV suit - indicate out of ammo condition

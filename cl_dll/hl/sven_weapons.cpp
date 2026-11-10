@@ -236,7 +236,9 @@ public:
 
 		m_iClip--;
 		Shoot( 1, Cone( 0.06105f, 0.0349f, 0.02618f ), 2048 );
-		Playback( FLAGS_PREDICTED, m_bBelt ? m_usLegacy : m_usFire, 0, 0, m_iClip, Body(), 0, 0 );
+		Playback( FLAGS_PREDICTED, m_bBelt ? m_usLegacy : m_usFire,
+			SvenEventCone( m_pPlayer, m_bBelt ? 0.05234f : 0.06105f, 0.0349f, 0.02618f ),
+			SvenEventCone( m_pPlayer, m_bBelt ? 0.05234f : 0.06105f, 0.0349f, 0.02618f ), m_iClip, Body(), 0, 0 );
 		SetAttackDelay( 0.08f );
 
 		// client.dll 0x1008f050: the view kick is applied here, not in the event.
@@ -294,6 +296,16 @@ public:
 	void Encode( weapon_data_t *d ) { d->m_fInZoom = m_bZoomed; d->fuser1 = (float)m_iReloadStage; }
 	BOOL Deploy( void ) { return DefaultDeploy( "models/v_m40a1.mdl", "models/p_m40a1.mdl", ANIM_DRAW, "sniper" ); }
 
+	// client.dll 0x10097790: the scope is a 20 degree field of view.
+	void SetZoom( bool zoomed ) { m_pPlayer->pev->fov = m_pPlayer->m_iFOV = zoomed ? 20 : 0; }
+
+	void Holster( int skiplocal )
+	{
+		m_bZoomed = false;
+		SetZoom( false );
+		CSvenWeapon::Holster( skiplocal );
+	}
+
 	void PrimaryAttack( void )
 	{
 		if( Underwater() || m_iClip <= 0 )
@@ -306,7 +318,8 @@ public:
 		m_iClip--;
 		const Vector cone = m_bZoomed ? Cone( 0.00873f, 0, 0 ) : Cone( 0.07846f, 0.05234f, 0.02618f );
 		Shoot( 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, lastRound, 0, m_bZoomed, 0 );
+		Playback( FLAGS_PREDICTED, m_usFire,
+			SvenEventCone( m_pPlayer, 0.06105f, 0.0349f, 0.02618f ), SvenEventCone( m_pPlayer, 0.06105f, 0.0349f, 0.02618f ), lastRound, 0, m_bZoomed, 0 );
 		m_flNextPrimaryAttack = Now() + 1.8f;
 		SetIdleDelay( 10, 15 );
 	}
@@ -314,6 +327,7 @@ public:
 	void SecondaryAttack( void )
 	{
 		m_bZoomed = !m_bZoomed;
+		SetZoom( m_bZoomed );
 		PlayClCheck( SOUND_ZOOM, 1.0f );
 		m_flNextSecondaryAttack = Now() + 0.6f;
 	}
@@ -327,6 +341,7 @@ public:
 		if( !StartStagedReload( CLIP, empty ? ANIM_RELOAD_EMPTY : ANIM_RELOAD, empty ? 2.5f : 2.6f, 0 ))
 			return;
 		m_bZoomed = false;
+		SetZoom( false );
 		if( empty )
 		{
 			m_flTimeWeaponIdle = Now() + 2.2f;
@@ -482,7 +497,8 @@ class CSvenUzi : public CSvenWeapon
 
 		const Vector cone = m_bAkimbo ? Cone( 0.08716f, 0.06976f, 0.06105f ) : Cone( 0.05234f, 0.0349f, 0.02618f );
 		Shoot( mode == FIRE_BOTH ? 2 : 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_bAkimbo ? m_usAkimbo : m_usFire, 0, 0, anim, 0, 0, 0 );
+		Playback( FLAGS_PREDICTED, m_bAkimbo ? m_usAkimbo : m_usFire,
+			SvenEventCone( m_pPlayer, 0.05234f, 0.0349f, 0.02618f ), SvenEventCone( m_pPlayer, 0.05234f, 0.0349f, 0.02618f ), anim, 0, 0, 0 );
 
 		if( mode == FIRE_BOTH || mode == FIRE_RIGHT_ONLY || mode == FIRE_LEFT_ONLY )
 			m_iClip = Q_max( m_iClip - 1, 0 );
@@ -924,6 +940,16 @@ CSvenWeapon *FindSvenWeapon( int id )
 	}
 	return NULL;
 }
+}
+
+// client.dll fire events pick a cone from the shooter's motion and stance
+// and scatter the tracer and decal inside it with the engine's random.
+float SvenEventCone( CBasePlayer *player, float moving, float standing, float crouched )
+{
+	float cone = moving;
+	if( player->pev->velocity.Length() == 0.0f )
+		cone = FBitSet( player->pev->flags, FL_DUCKING ) ? crouched : standing;
+	return ( gEngfuncs.pfnRandomFloat( -0.5f, 0.5f ) + gEngfuncs.pfnRandomFloat( -0.5f, 0.5f )) * cone;
 }
 
 void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay )

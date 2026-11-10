@@ -1005,13 +1005,17 @@ private:
 // cl_lw 1 against a Sven server.
 extern int g_bSvenLocalWeapons;
 void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay = 0.0f );
+float SvenEventCone( CBasePlayer *player, float moving, float standing, float crouched );
+#define EVENT_SPREAD_CONE( value, player, moving, standing, crouched ) \
+	( g_bSvenLocalWeapons ? SvenEventCone( player, moving, standing, crouched ) : ( value ))
 #else
 #define g_bSvenLocalWeapons 0
 #define SvenPredictedSound( ... )
+#define EVENT_SPREAD_CONE( value, player, moving, standing, crouched ) ( value )
 #endif
 
-// client.dll sends no spread with its own fire events: tracers and decals
-// are centred, and only the server decides where the bullet really lands.
+// client.dll sends no spread with its own fire events; each event picks its
+// own cone. Weapons whose events have none (glock primary, 357) never stray.
 #define EVENT_SPREAD( value ) ( g_bSvenLocalWeapons ? 0.0f : ( value ))
 
 #endif // WEAPONS_H
