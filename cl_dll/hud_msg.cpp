@@ -168,6 +168,11 @@ int CHud::MsgFunc_Concuss( const char *pszName, int iSize, void *pbuf )
 	return 1;
 }
 
+bool HUD_IsClassicMode( void )
+{
+	return gHUD.m_bClassicMode;
+}
+
 int CHud::MsgFunc_ClassicMode( const char *pszName, int iSize, void *pbuf )
 {
 	BEGIN_READ( pbuf, iSize );

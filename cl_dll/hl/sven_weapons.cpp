@@ -317,9 +317,10 @@ public:
 		const bool lastRound = m_iClip == 1;
 		m_iClip--;
 		const Vector cone = m_bZoomed ? Cone( 0.00873f, 0, 0 ) : Cone( 0.07846f, 0.05234f, 0.02618f );
-		Shoot( 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire,
-			SvenEventCone( m_pPlayer, 0.06105f, 0.0349f, 0.02618f ), SvenEventCone( m_pPlayer, 0.06105f, 0.0349f, 0.02618f ), lastRound, 0, m_bZoomed, 0 );
+		// client.dll's sniper event scatters by motion even when scoped while
+		// the server's scoped shot flies straight; draw the real shot instead.
+		const Vector dir = Shoot( 1, cone, 8192 );
+		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, lastRound, 0, m_bZoomed, 0 );
 		m_flNextPrimaryAttack = Now() + 1.8f;
 		SetIdleDelay( 10, 15 );
 	}

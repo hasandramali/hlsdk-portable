@@ -1006,6 +1006,7 @@ private:
 extern int g_bSvenLocalWeapons;
 void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay = 0.0f );
 float SvenEventCone( CBasePlayer *player, float moving, float standing, float crouched );
+bool HUD_IsClassicMode( void );
 #define EVENT_SPREAD_CONE( value, player, moving, standing, crouched ) \
 	( g_bSvenLocalWeapons ? SvenEventCone( player, moving, standing, crouched ) : ( value ))
 #else

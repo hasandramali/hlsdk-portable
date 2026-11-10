@@ -697,6 +697,7 @@ static int SvenZoomFov( int id )
 	switch( id )
 	{
 	case WEAPON_PYTHON: return 40;
+	case WEAPON_MP5: return HUD_IsClassicMode() ? 0 : 40;
 	case WEAPON_CROSSBOW: return 20;
 	case 23: return 20; // sniper rifle
 	}
@@ -799,7 +800,7 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		data->iuser4 = SvenValidAmmo( weapon->m_iSecondaryAmmoType ) ? player.m_rgAmmo[weapon->m_iSecondaryAmmoType] : 0;
 	}
 
-	if(( id == WEAPON_PYTHON || id == WEAPON_CROSSBOW ) && weapon == player.m_pActiveItem )
+	if(( id == WEAPON_PYTHON || id == WEAPON_CROSSBOW || id == WEAPON_MP5 ) && weapon == player.m_pActiveItem )
 		data->m_fInZoom = player.pev->fov != 0;
 
 	switch( id )

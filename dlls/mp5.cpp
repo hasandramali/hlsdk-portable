@@ -195,6 +195,16 @@ void CMP5::PrimaryAttack()
 
 void CMP5::SecondaryAttack( void )
 {
+#if CLIENT_DLL
+	// client.dll 0x100918f0: outside classic mode the 9mmAR's secondary fire
+	// is a 40 degree zoom; the grenade launcher only answers it in classic.
+	if( g_bSvenLocalWeapons && !HUD_IsClassicMode())
+	{
+		m_pPlayer->pev->fov = m_pPlayer->m_iFOV = m_pPlayer->pev->fov != 0 ? 0 : 40;
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.6f;
+		return;
+	}
+#endif
 	// don't fire underwater
 	if( m_pPlayer->pev->waterlevel == 3 )
 	{
