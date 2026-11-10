@@ -262,6 +262,21 @@ void CMP5::SecondaryAttack( void )
 
 void CMP5::Reload( void )
 {
+#if CLIENT_DLL
+	// client.dll 0x10091d40: Sven's 9mmAR holds 30 rounds (50 in classic
+	// mode) and reloads in 1.6 s. Predicting with HL's 50 let a full clip
+	// "reload" here while the server refused it.
+	if( g_bSvenLocalWeapons )
+	{
+		const int clip = HUD_IsClassicMode() ? MP5_MAX_CLIP : 30;
+		ItemInfoArray[m_iId].iMaxClip = clip; // also used when the reload finishes
+		if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 || m_iClip >= clip )
+			return;
+		if( DefaultReload( clip, MP5_RELOAD, 1.6f ) && m_pPlayer->pev->fov != 0 )
+			m_pPlayer->pev->fov = m_pPlayer->m_iFOV = 0; // reloading drops the zoom
+		return;
+	}
+#endif
 	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 || m_iClip == MP5_MAX_CLIP )
 		return;
 
