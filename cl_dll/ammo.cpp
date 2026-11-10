@@ -783,9 +783,12 @@ int CHudAmmo::MsgFunc_WeapPickup( const char *pszName, int iSize, void *pbuf )
 	// Top-left text notifier (menu closed) or green menu highlight (menu open).
 	// WeapPickup itself is only sent for genuine ground pickups, so a weapon
 	// the player already holds never triggers anything here.
-	// The top-left pickup notice belongs to the cl_lw 0 inventory.
+	// cl_lw 0 shows the top-left notice; cl_lw 1 only marks the weapon green
+	// in the menu until the menu has been opened and closed again.
 	if( !LocalWeaponsEnabled() )
 		OnWeaponPickup( iIndex );
+	else
+		RememberNewPickup( iIndex );
 
 	return 1;
 }
@@ -809,6 +812,22 @@ void CHudAmmo::CloseWeaponMenu( bool playSound )
 		m_iNewPickupIds[i] = 0;
 	if( playSound )
 		PlaySound( "common/wpn_hudoff.wav", 1 );
+}
+
+void CHudAmmo::RememberNewPickup( int iId )
+{
+	if( iId <= 0 || iId >= MAX_HUD_WEAPONS )
+		return;
+	for( int i = 0; i < MAX_NEW_PICKUPS; i++ )
+	{
+		if( m_iNewPickupIds[i] == iId )
+			return;
+		if( m_iNewPickupIds[i] <= 0 )
+		{
+			m_iNewPickupIds[i] = iId;
+			return;
+		}
+	}
 }
 
 bool CHudAmmo::IsNewPickupWeapon( int iId ) const
@@ -1699,14 +1718,22 @@ int CHudAmmo::DrawWList( float flTime )
 {
 	int r, g, b, x, y, a, i;
 
+	// cl_lw 1 keeps the greens while the menu is closed and clears them once
+	// the menu that showed them has closed.
+	static bool s_bMenuShown = false;
 	if( !gpActiveSel )
 	{
 		// Menu closed (by any path): temporary pickup greens expire here,
 		// so reopening the list always shows normal colors again.
-		for( int k = 0; k < MAX_NEW_PICKUPS; k++ )
-			m_iNewPickupIds[k] = 0;
+		if( !LocalWeaponsEnabled() || s_bMenuShown )
+		{
+			for( int k = 0; k < MAX_NEW_PICKUPS; k++ )
+				m_iNewPickupIds[k] = 0;
+		}
+		s_bMenuShown = false;
 		return 0;
 	}
+	s_bMenuShown = true;
 
 	// Auto-close the menu after a quiet spell. Nav steps and menu-open
 	// pickups refresh the deadline via RefreshMenuTimer.

@@ -2520,7 +2520,8 @@ void EV_SporeFire( event_args_t *args )
 
 	AngleVectors( angles, forward, right, up );
 
-	if( EV_IsLocal( idx ) )
+	// with cl_lw 1 the predicted spore launcher already started this animation
+	if( EV_IsLocal( idx ) && !( cl_lw && cl_lw->value ))
 	{
 		gEngfuncs.pEventAPI->EV_WeaponAnimation( SPLAUNCHER_FIRE, 0 );
 		V_PunchAxis( 0, -5.0 );

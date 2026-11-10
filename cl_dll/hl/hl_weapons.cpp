@@ -691,6 +691,18 @@ enum { GAUSS_NO_AMMO_BURN = 1000 };
 static const float GAUSS_SVEN_FULL_CHARGE = 3.0f; // client.dll 0x1008a57c
 static float s_flSvenCommandEnd = 0.0f;
 
+// Field of view used by each zoomable weapon, 0 for the others.
+static int SvenZoomFov( int id )
+{
+	switch( id )
+	{
+	case WEAPON_PYTHON: return 40;
+	case WEAPON_CROSSBOW: return 20;
+	case 23: return 20; // sniper rifle
+	}
+	return 0;
+}
+
 static bool SvenSendsAmmoInUser( int id )
 {
 	switch( id )
@@ -786,6 +798,9 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		data->iuser3 = weapon->m_iSecondaryAmmoType;
 		data->iuser4 = SvenValidAmmo( weapon->m_iSecondaryAmmoType ) ? player.m_rgAmmo[weapon->m_iSecondaryAmmoType] : 0;
 	}
+
+	if(( id == WEAPON_PYTHON || id == WEAPON_CROSSBOW ) && weapon == player.m_pActiveItem )
+		data->m_fInZoom = player.pev->fov != 0;
 
 	switch( id )
 	{
@@ -973,6 +988,15 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	player.pev->waterlevel = from->client.waterlevel;
 	player.pev->maxspeed = from->client.maxspeed;
 	player.pev->fov = from->client.fov;
+
+	// A Sven server sends no zoom to cl_lw 1 clients; the active weapon's
+	// zoom flag carries it.
+	if( g_bSvenLocalWeapons && from->client.m_iId > 0 && from->client.m_iId < MAX_WEAPONS )
+	{
+		const int zoomFov = SvenZoomFov( from->client.m_iId );
+		if( zoomFov )
+			player.pev->fov = from->weapondata[from->client.m_iId].m_fInZoom ? zoomFov : 0;
+	}
 	player.pev->weaponanim = from->client.weaponanim;
 	player.pev->viewmodel = from->client.viewmodel;
 	player.m_flNextAttack = from->client.m_flNextAttack;

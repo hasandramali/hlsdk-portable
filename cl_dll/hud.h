@@ -174,6 +174,7 @@ private:
 	// Refreshed on every nav step and on every menu-open pickup.
 	float m_fMenuCloseAt;
 	bool IsNewPickupWeapon( int iId ) const;
+	void RememberNewPickup( int iId );
 	bool IsNewPickupSlot( int iSlot ) const;
 	void RefreshMenuTimer( void );
 	void CloseWeaponMenu( bool playSound );

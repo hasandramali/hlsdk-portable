@@ -137,7 +137,9 @@ void HUD_PlaybackEvent( int flags, const edict_t *pInvoker, unsigned short event
 
 	// Weapon prediction events are assumed to occur at the player's origin
 	org			= g_finalstate->playerstate.origin;
-	ang			= v_client_aimangles;
+	// client.dll 0x10014230 aims its own events with the final view angles,
+	// recoil included, so the tracers climb with the punch like the server's.
+	ang			= g_bSvenLocalWeapons ? v_angles : v_client_aimangles;
 	gEngfuncs.pfnPlaybackEvent( flags, pInvoker, eventindex, delay, org, ang, fparam1, fparam2, iparam1, iparam2, bparam1, bparam2 );
 }
 

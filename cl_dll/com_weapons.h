@@ -41,6 +41,8 @@ extern cvar_t *cl_wpn_punchangles;
 extern int g_runfuncs;
 extern vec3_t v_angles;
 extern vec3_t v_client_aimangles;
+extern vec3_t v_angles;
+extern int g_bSvenLocalWeapons;
 extern float g_lastFOV;
 extern struct local_state_s *g_finalstate;
 #endif
