@@ -257,7 +257,8 @@ void CShotgun::SecondaryAttack( void )
 		m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 
 	//if( m_iClip != 0 )
-		m_flPumpTime = gpGlobals->time + 0.95f;
+		// Sven's double shot doesn't work the slide (as seen with cl_lw 0)
+		m_flPumpTime = g_bSvenLocalWeapons ? 0.0f : gpGlobals->time + 0.95f;
 
 	m_flNextPrimaryAttack = GetNextAttackDelay( 1.5f );
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.5f;
@@ -351,6 +352,8 @@ void CShotgun::WeaponIdle( void )
 			{
 				// reload debounce has timed out
 				SendWeaponAnim( SHOTGUN_PUMP );
+				// client.dll 0x10096a32: the end-of-reload pump, without a shell
+				SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM, 0.0f, 1 );
 				
 				// play cocking sound
 				EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );

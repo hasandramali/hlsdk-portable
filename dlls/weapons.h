@@ -1004,7 +1004,7 @@ private:
 #if CLIENT_DLL
 // cl_lw 1 against a Sven server.
 extern int g_bSvenLocalWeapons;
-void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay = 0.0f );
+void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay = 0.0f, int noShell = 0 );
 float SvenEventCone( CBasePlayer *player, float moving, float standing, float crouched );
 bool HUD_IsClassicMode( void );
 Vector SvenMotionCone( CBasePlayer *player, float moving, float standing, float crouched );

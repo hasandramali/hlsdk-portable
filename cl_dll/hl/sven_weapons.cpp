@@ -964,12 +964,12 @@ float SvenEventCone( CBasePlayer *player, float moving, float standing, float cr
 	return ( gEngfuncs.pfnRandomFloat( -0.5f, 0.5f ) + gEngfuncs.pfnRandomFloat( -0.5f, 0.5f )) * cone;
 }
 
-void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay )
+void SvenPredictedSound( CBasePlayer *player, int sound, float volume, int channel, float delay, int noShell )
 {
 	if( !g_bSvenLocalWeapons )
 		return;
 	const unsigned short eventIndex = PRECACHE_EVENT( 1, "events/clcheck.sc" );
-	PLAYBACK_EVENT_FULL( FEV_NOTHOST, player->edict(), eventIndex, delay, g_vecZero, g_vecZero, (float)sound, volume, 2, channel, 0, 0 );
+	PLAYBACK_EVENT_FULL( FEV_NOTHOST, player->edict(), eventIndex, delay, g_vecZero, g_vecZero, (float)sound, volume, 2, channel, 0, noShell );
 }
 
 void SvenWeapons_Prepare( CBasePlayer *owner )
