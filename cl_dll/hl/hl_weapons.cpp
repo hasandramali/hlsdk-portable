@@ -51,6 +51,8 @@ static int s_bEventsBound = 0;
 
 int g_bSvenLocalWeapons = 0;
 int HUD_WeaponSecondaryAmmoType( int id );
+int HUD_WeaponPrimaryAmmoType( int id );
+int HUD_AmmoCount( int type );
 void SvenWeapons_Prepare( CBasePlayer *owner );
 CBasePlayerWeapon *SvenWeapons_Find( int id );
 void SvenWeapons_Decode( int id, const weapon_data_t *data );
@@ -696,7 +698,6 @@ static int SvenZoomFov( int id )
 {
 	switch( id )
 	{
-	case WEAPON_PYTHON: return 40;
 	case WEAPON_MP5: return HUD_IsClassicMode() ? 0 : 40;
 	case WEAPON_CROSSBOW: return 20;
 	case 23: return 20; // sniper rifle
@@ -739,6 +740,14 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 		}
 	}
 
+	else
+	{
+		// No ammo in weapon_data (e.g. RPG): use the type the HUD registered.
+		const int type = HUD_WeaponPrimaryAmmoType( id );
+		if( SvenValidAmmo( type ))
+			weapon->m_iPrimaryAmmoType = type;
+	}
+
 	if( SvenSendsSecondaryInUser( id ) && SvenValidAmmo( data->iuser3 ))
 	{
 		weapon->m_iSecondaryAmmoType = data->iuser3;
@@ -769,8 +778,17 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 		weapon->m_fInAttack = (int)data->fuser4;
 		break;
 	case WEAPON_HANDGRENADE:
-		weapon->m_flStartThrow = data->fuser1;
-		weapon->m_flReleaseThrow = data->fuser2;
+		// client.dll 0x1008c670/0x1008c8c0: Sven keeps both throw times as
+		// ages counted down from 0 and marks "no throw in progress" with a
+		// release time of 1.0; HL wants absolute times and -1. Passing 1.0
+		// through made HL think a throw had just ended and redraw the grenade.
+		weapon->m_flStartThrow = data->fuser1 != 0.0f ? (float)gpGlobals->time + data->fuser1 : 0.0f;
+		if( data->fuser2 > 0.5f )
+			weapon->m_flReleaseThrow = -1.0f;
+		else if( data->fuser2 < 0.0f )
+			weapon->m_flReleaseThrow = (float)gpGlobals->time + data->fuser2;
+		else
+			weapon->m_flReleaseThrow = 0.0f;
 		break;
 	case WEAPON_SATCHEL:
 		weapon->m_chargeReady = (int)data->fuser1;
@@ -800,7 +818,7 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		data->iuser4 = SvenValidAmmo( weapon->m_iSecondaryAmmoType ) ? player.m_rgAmmo[weapon->m_iSecondaryAmmoType] : 0;
 	}
 
-	if(( id == WEAPON_PYTHON || id == WEAPON_CROSSBOW || id == WEAPON_MP5 ) && weapon == player.m_pActiveItem )
+	if(( id == WEAPON_CROSSBOW || id == WEAPON_MP5 ) && weapon == player.m_pActiveItem )
 		data->m_fInZoom = player.pev->fov != 0;
 
 	switch( id )
@@ -818,10 +836,6 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		data->fuser3 = player.m_flPlayAftershock != 0.0f ? player.m_flPlayAftershock - s_flSvenCommandEnd : 0.0f;
 		data->fuser4 = weapon->m_fInAttack;
 		break;
-	case WEAPON_HANDGRENADE:
-		data->fuser1 = weapon->m_flStartThrow;
-		data->fuser2 = weapon->m_flReleaseThrow;
-		break;
 	case WEAPON_HORNETGUN:
 		data->fuser2 = static_cast<CHgun *>( weapon )->m_flRechargeTime - s_flSvenCommandEnd;
 		break;
@@ -834,6 +848,17 @@ static void SvenEncodeWholeNumberStates( int id, CBasePlayerWeapon *weapon, weap
 {
 	if( id == WEAPON_SATCHEL )
 		data->fuser1 = weapon->m_chargeReady;
+	else if( id == WEAPON_HANDGRENADE )
+	{
+		// back to Sven's form, as ages at the end of this command
+		data->fuser1 = weapon->m_flStartThrow != 0.0f ? Q_min( weapon->m_flStartThrow - s_flSvenCommandEnd, -0.001f ) : 0.0f;
+		if( weapon->m_flReleaseThrow < 0.0f )
+			data->fuser2 = 1.0f;
+		else if( weapon->m_flReleaseThrow > 0.0f )
+			data->fuser2 = Q_min( weapon->m_flReleaseThrow - s_flSvenCommandEnd, -0.001f );
+		else
+			data->fuser2 = 0.0f;
+	}
 	else if( id == WEAPON_HORNETGUN )
 		data->fuser1 = static_cast<CHgun *>( weapon )->m_iFirePhase;
 	else if( id == WEAPON_GAUSS )
@@ -930,6 +955,15 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 	// We are not predicting the current weapon, just bow out here.
 	if( !pWeapon )
 		return;
+
+
+	// Reserve ammo comes from the HUD counts the server keeps current; the
+	// weapon records below refine the types they carry.
+	if( g_bSvenLocalWeapons )
+	{
+		for( int type = 0; type < MAX_AMMO_SLOTS; type++ )
+			player.m_rgAmmo[type] = HUD_AmmoCount( type );
+	}
 
 	for( i = 0; i < MAX_WEAPONS; i++ )
 	{

@@ -194,6 +194,19 @@ void CShotgun::SecondaryAttack( void )
 		return;
 	}
 
+#if CLIENT_DLL
+	// client.dll 0x10095f50: with one shell left Sven fires it as a single
+	// shot instead of trying to reload.
+	if( g_bSvenLocalWeapons && m_iClip == 1 )
+	{
+		PrimaryAttack();
+		m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25f;
+		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
+		m_flPumpTime = 0;
+		return;
+	}
+#endif
 	if( m_iClip <= 1 )
 	{
 		Reload();
@@ -308,6 +321,8 @@ void CShotgun::ItemPostFrame( void )
 	{
 		// play pumping sound
 		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );
+		// client.dll 0x10095ae0 pumps (and ejects the shell) on the client
+		SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM );
 		m_flPumpTime = 0;
 	}
 

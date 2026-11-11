@@ -49,6 +49,17 @@ int HUD_WeaponSecondaryAmmoType( int id )
 	return gWR.GetWeapon( id )->iAmmo2Type;
 }
 
+int HUD_WeaponPrimaryAmmoType( int id )
+{
+	return id > 0 && id < MAX_HUD_WEAPONS ? gWR.GetWeapon( id )->iAmmoType : -1;
+}
+
+// client.dll 0x1002b130 checks reloads against the HUD's reserve counts.
+int HUD_AmmoCount( int type )
+{
+	return type >= 0 && type < MAX_AMMO_TYPES ? gWR.CountAmmo( type ) : 0;
+}
+
 extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int count )
 {
 	g_bSvenLocalWeapons = 1;

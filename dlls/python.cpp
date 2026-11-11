@@ -131,6 +131,14 @@ void CPython::Holster( int skiplocal /* = 0 */ )
 void CPython::SecondaryAttack( void )
 {
 #if CLIENT_DLL
+	// client.dll 0x10092af0: Sven's revolver has no scope.
+	if( g_bSvenLocalWeapons )
+	{
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.6f;
+		return;
+	}
+#endif
+#if CLIENT_DLL
 	if( !bIsMultiplayer() )
 #else
 	if( !g_pGameRules->IsMultiplayer() )
@@ -227,7 +235,7 @@ void CPython::Reload( void )
 #else
 	bUseScope = g_pGameRules->IsMultiplayer();
 #endif
-	if( DefaultReload( PYTHON_MAX_CLIP, PYTHON_RELOAD, 2.0f, bUseScope ) )
+	if( DefaultReload( PYTHON_MAX_CLIP, PYTHON_RELOAD, g_bSvenLocalWeapons ? 2.5f : 2.0f, bUseScope ) )
 	{
 		SvenPredictedSound( m_pPlayer, 4, 0.8f, CHAN_WEAPON, 1.5f );
 		m_flSoundDelay = 1.5f;

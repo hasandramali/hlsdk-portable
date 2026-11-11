@@ -320,7 +320,9 @@ public:
 		// client.dll's sniper event scatters by motion even when scoped while
 		// the server's scoped shot flies straight; draw the real shot instead.
 		const Vector dir = Shoot( 1, cone, 8192 );
-		Playback( FLAGS_PREDICTED, m_usFire, dir.x, dir.y, lastRound, 0, m_bZoomed, 0 );
+		// client.dll's sniper event draws every shot at the centre, scoped or not
+		(void)dir;
+		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, lastRound, 0, m_bZoomed, 0 );
 		m_flNextPrimaryAttack = Now() + 1.8f;
 		SetIdleDelay( 10, 15 );
 	}
@@ -941,6 +943,15 @@ CSvenWeapon *FindSvenWeapon( int id )
 	}
 	return NULL;
 }
+}
+
+// client.dll 0x1002ade0: a weapon's moving, standing and crouched cones
+Vector SvenMotionCone( CBasePlayer *player, float moving, float standing, float crouched )
+{
+	float cone = moving;
+	if( player->pev->velocity.Length() == 0.0f )
+		cone = FBitSet( player->pev->flags, FL_DUCKING ) ? crouched : standing;
+	return Vector( cone, cone, cone );
 }
 
 // client.dll fire events pick a cone from the shooter's motion and stance

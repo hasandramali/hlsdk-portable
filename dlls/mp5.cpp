@@ -164,7 +164,14 @@ void CMP5::PrimaryAttack()
 #endif
 	{
 		// optimized multiplayer. Widened to make it easier to hit a moving player
-		vecDir = m_pPlayer->FireBulletsPlayer( 1, vecSrc, vecAiming, VECTOR_CONE_6DEGREES, 8192, BULLET_PLAYER_MP5, 2, 0, m_pPlayer->pev, m_pPlayer->random_seed );
+		Vector vecCone = VECTOR_CONE_6DEGREES;
+#if CLIENT_DLL
+		// client.dll 0x10091030: the scoped and hip cones by motion and stance
+		if( g_bSvenLocalWeapons )
+			vecCone = m_pPlayer->pev->fov != 0 ? SvenMotionCone( m_pPlayer, 0.06976f, 0.0349f, 0.02618f )
+				: SvenMotionCone( m_pPlayer, 0.06976f, 0.05234f, 0.04362f );
+#endif
+		vecDir = m_pPlayer->FireBulletsPlayer( 1, vecSrc, vecAiming, vecCone, 8192, BULLET_PLAYER_MP5, 2, 0, m_pPlayer->pev, m_pPlayer->random_seed );
 	}
 	else
 	{
@@ -178,8 +185,7 @@ void CMP5::PrimaryAttack()
 #else
 	flags = 0;
 #endif
-	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, EVENT_SPREAD_CONE( vecDir.x, m_pPlayer, 0.0349f, 0.02618f, 0.01745f ),
-		EVENT_SPREAD_CONE( vecDir.y, m_pPlayer, 0.0349f, 0.02618f, 0.01745f ), 0, 0, 0, 0 );
+	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usMP5, 0.0f, g_vecZero, g_vecZero, vecDir.x, vecDir.y, 0, 0, 0, 0 );
 
 	if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		// HEV suit - indicate out of ammo condition
