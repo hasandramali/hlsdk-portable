@@ -411,6 +411,9 @@ void CHudMessage::MessageAdd( const char *pName, float time )
 		return;
 
 	client_textmessage_t *message = TextMessageGet( pName[0] == '#' ? pName + 1 : pName );
+	if( gEngfuncs.pfnGetCvarFloat( "cl_goldsrc_debug" ) >= 1 )
+		gEngfuncs.Con_Printf( "CLIENT-MSG: TextMessageGet(\"%s\") -> %s\n",
+			pName, message ? "slot" : "NULL(fallback y=0.7)" );
 	if( !message )
 	{
 		g_pCustomMessage.effect = 2;

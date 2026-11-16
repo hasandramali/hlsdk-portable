@@ -528,7 +528,6 @@ void CHud::Init( void )
 	m_Train.Init();
 	m_Battery.Init();
 	m_Flash.Init();
-	m_Message.Init();
 	m_StatusBar.Init();
 	m_DeathNotice.Init();
 	m_AmmoSecondary.Init();
@@ -538,6 +537,9 @@ void CHud::Init( void )
 	m_TouchOrbit.Init();
 	m_PickupNotify.Init();
 	SvenUI_Init();
+	// draw text messages after the Sven UI custom sprites so an opaque
+	// background sprite (e.g. ann_bar.spr) does not cover the text
+	m_Message.Init();
 #if USE_VGUI
 	GetClientVoiceMgr()->Init(&g_VoiceStatusHelper, (vgui::Panel**)&gViewPort);
 #endif
