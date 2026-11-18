@@ -194,30 +194,7 @@ void CShotgun::SecondaryAttack( void )
 		return;
 	}
 
-#if CLIENT_DLL
-	// client.dll 0x10095f50: outside classic mode +attack2 is a rapid single
-	// shot (SPAS-like), not HL's double shot. With one shell left it fires the
-	// last shell; the normal auto-reload then takes over.
-	// Classic (HL1) mode keeps the original double-shot / reload behaviour.
-	if( g_bSvenLocalWeapons && !HUD_IsClassicMode() && m_iClip == 1 )
-	{
-		PrimaryAttack();
-		m_pPlayer->m_iWeaponVolume = 0x600;
-		m_pPlayer->m_iWeaponFlash = 0x100;
-		m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
-		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25f;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
-		m_flPumpTime = 0;
-		// The Sven server reload (server.dll 0x102438c0) goes straight to
-		// inserting shells after firing the last one; it does not play the
-		// START_RELOAD forearm that HL's Reload() state 0 plays. Enter at
-		// state 1 so the client matches the server instead of animating the
-		// forearm before the reload.
-		m_fInSpecialReload = 1;
-		return;
-	}
-#endif
-	if( m_iClip <= 1 )
+	if( m_iClip <= 0 )
 	{
 		Reload();
 		PlayEmptySound();
@@ -227,10 +204,78 @@ void CShotgun::SecondaryAttack( void )
 	m_pPlayer->m_iWeaponVolume = LOUD_GUN_VOLUME;
 	m_pPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
 
+	// Sven client.dll 0x10095f50: outside classic mode +attack2 is a rapid single
+	// shot (SPAS-like), not HL's double shot. In classic (HL1) mode it keeps the
+	// original double-shot / reload behaviour.
+	qboolean svenRapidSingle = FALSE;
+#if CLIENT_DLL
+	svenRapidSingle = g_bSvenLocalWeapons && !HUD_IsClassicMode();
+#endif
+	if( svenRapidSingle )
+	{
+		// Single-shot path (client.dll 0x10096217, server.dll 0x10241fc7).
+		m_iClip--;
+
+		int flags;
+#if defined( CLIENT_WEAPONS )
+		flags = FEV_NOTHOST;
+#else
+		flags = 0;
+#endif
+		m_pPlayer->pev->effects = (int)( m_pPlayer->pev->effects ) | EF_MUZZLEFLASH;
+
+		// player "shoot" animation
+		m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
+
+		Vector vecSrc = m_pPlayer->GetGunPosition();
+		Vector vecAiming = m_pPlayer->GetAutoaimVector( AUTOAIM_5DEGREES );
+
+		Vector vecDir;
+
+#if CLIENT_DLL
+		if( bIsMultiplayer() )
+#else
+		if( g_pGameRules->IsMultiplayer() )
+#endif
+		{
+			vecDir = m_pPlayer->FireBulletsPlayer( 4, vecSrc, vecAiming, VECTOR_CONE_DM_SHOTGUN, 2048, BULLET_PLAYER_BUCKSHOT, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
+		}
+		else
+		{
+			vecDir = m_pPlayer->FireBulletsPlayer( 6, vecSrc, vecAiming, VECTOR_CONE_10DEGREES, 2048, BULLET_PLAYER_BUCKSHOT, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
+		}
+
+		PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usSingleFire, 0.0, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
+
+		if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+			m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
+
+		m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25f;
+		if( m_iClip != 0 )
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 6.0f;
+		else
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
+		m_flPumpTime = 0;
+		// In cl_lw 1, firing the last shell via Sven's single-shot secondary must
+		// not play the START_RELOAD forearm (matches observed cl_lw 0/server flow).
+		// Enter reload at state 1 so Reload() inserts shells directly.
+		m_fInSpecialReload = ( m_iClip == 0 ) ? 1 : 0;
+		return;
+	}
+
+	// Classic / HL double shot (client.dll 0x10095fd0, server.dll 0x10241dee).
+	if( m_iClip <= 1 )
+	{
+		Reload();
+		PlayEmptySound();
+		return;
+	}
+
 	m_iClip -= 2;
 
 	int flags;
-#if CLIENT_WEAPONS
+#if defined( CLIENT_WEAPONS )
 	flags = FEV_NOTHOST;
 #else
 	flags = 0;
@@ -266,16 +311,11 @@ void CShotgun::SecondaryAttack( void )
 		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 
-	//if( m_iClip != 0 )
-		// Sven's double shot doesn't work the slide (as seen with cl_lw 0)
-		m_flPumpTime = g_bSvenLocalWeapons ? 0.0f : gpGlobals->time + 0.95f;
+	m_flPumpTime = gpGlobals->time + 0.95f;
 
 	m_flNextPrimaryAttack = GetNextAttackDelay( 1.5f );
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.5f;
-	if( m_iClip != 0 )
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 6.0f;
-	else
-		m_flTimeWeaponIdle = 1.5;
+	m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 5.5f;
 
 	m_fInSpecialReload = 0;
 }
@@ -283,6 +323,10 @@ void CShotgun::SecondaryAttack( void )
 void CShotgun::Reload( void )
 {
 	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 || m_iClip == SHOTGUN_MAX_CLIP )
+		return;
+
+	// Sven client/server Reload (0x10096560 / 0x10242350).
+	if( m_flNextReload > UTIL_WeaponTimeBase() )
 		return;
 
 	// don't reload until recoil is done
@@ -294,28 +338,56 @@ void CShotgun::Reload( void )
 	{
 		SendWeaponAnim( SHOTGUN_START_RELOAD );
 		m_fInSpecialReload = 1;
-		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.6f;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.6f;
-		m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
-		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 1.0f;
+		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.7f;
+		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.7f;
+		m_flNextPrimaryAttack = GetNextAttackDelay( 0.7f );
+		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.7f;
 		return;
 	}
 	else if( m_fInSpecialReload == 1 )
 	{
 		if( m_flTimeWeaponIdle > UTIL_WeaponTimeBase() )
 			return;
-		// was waiting for gun to move to side
-		m_fInSpecialReload = 2;
 
-		if( RANDOM_LONG( 0, 1 ) )
-			EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/reload1.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ) );
-		else
-			EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/reload3.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ) );
+		if( m_iClip == SHOTGUN_MAX_CLIP )
+		{
+			m_fInSpecialReload = 0;
+			return;
+		}
+
+		qboolean classic = FALSE;
+#if CLIENT_DLL
+		classic = HUD_IsClassicMode();
+#endif
 
 		SendWeaponAnim( SHOTGUN_RELOAD );
 
-		m_flNextReload = UTIL_WeaponTimeBase() + 0.5f;
-		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
+		if( classic )
+		{
+			m_flNextReload = UTIL_WeaponTimeBase() + 0.5f;
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
+			m_flNextPrimaryAttack = GetNextAttackDelay( 0.7f );
+			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.7f;
+		}
+		else
+		{
+			m_flNextReload = UTIL_WeaponTimeBase() + 0.3f;
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.3f;
+			m_flNextPrimaryAttack = GetNextAttackDelay( 0.5f );
+			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.5f;
+		}
+
+		// Add them to the clip
+		m_iClip += 1;
+		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= 1;
+
+		if( RANDOM_LONG( 0, 1 ) )
+			EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, classic ? "hlclassic/weapons/reload1.wav" : "weapons/reload1.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ) );
+		else
+			EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, classic ? "hlclassic/weapons/reload3.wav" : "weapons/reload3.wav", 1, ATTN_NORM, 0, 85 + RANDOM_LONG( 0, 0x1f ) );
+
+		// Sven client/server keep m_fInSpecialReload at 1 for each inserted shell.
+		m_fInSpecialReload = 1;
 	}
 	else
 	{
