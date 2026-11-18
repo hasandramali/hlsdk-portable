@@ -201,19 +201,20 @@ void CShotgun::SecondaryAttack( void )
 		return;
 	}
 
-	m_pPlayer->m_iWeaponVolume = LOUD_GUN_VOLUME;
-	m_pPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
-
-	// Sven client.dll 0x10095f50: outside classic mode +attack2 is a rapid single
-	// shot (SPAS-like), not HL's double shot. In classic (HL1) mode it keeps the
-	// original double-shot / reload behaviour.
+	// Sven client.dll 0x10095f50 / server.dll 0x10241d00:
+	// outside classic (HL1) mode, +attack2 is a rapid single shot (SPAS-like)
+	// for any clip > 0. In classic mode it keeps the original double shot.
 	qboolean svenRapidSingle = FALSE;
 #if CLIENT_DLL
 	svenRapidSingle = g_bSvenLocalWeapons && !HUD_IsClassicMode();
 #endif
+
+	m_pPlayer->m_iWeaponVolume = LOUD_GUN_VOLUME;
+	m_pPlayer->m_iWeaponFlash = NORMAL_GUN_FLASH;
+
 	if( svenRapidSingle )
 	{
-		// Single-shot path (client.dll 0x10096217, server.dll 0x10241fc7).
+		// Single-shot path (client.dll 0x10096217).
 		m_iClip--;
 
 		int flags;
@@ -224,7 +225,6 @@ void CShotgun::SecondaryAttack( void )
 #endif
 		m_pPlayer->pev->effects = (int)( m_pPlayer->pev->effects ) | EF_MUZZLEFLASH;
 
-		// player "shoot" animation
 		m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
 		Vector vecSrc = m_pPlayer->GetGunPosition();
@@ -245,7 +245,8 @@ void CShotgun::SecondaryAttack( void )
 			vecDir = m_pPlayer->FireBulletsPlayer( 6, vecSrc, vecAiming, VECTOR_CONE_10DEGREES, 2048, BULLET_PLAYER_BUCKSHOT, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
 		}
 
-		PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usSingleFire, 0.0, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
+		// Sven client secondary uses the secondary/double fire event in both modes.
+		PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usDoubleFire, 0.0, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
 
 		if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 			m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
@@ -257,14 +258,11 @@ void CShotgun::SecondaryAttack( void )
 		else
 			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
 		m_flPumpTime = 0;
-		// In cl_lw 1, firing the last shell via Sven's single-shot secondary must
-		// not play the START_RELOAD forearm (matches observed cl_lw 0/server flow).
-		// Enter reload at state 1 so Reload() inserts shells directly.
-		m_fInSpecialReload = ( m_iClip == 0 ) ? 1 : 0;
+		m_fInSpecialReload = 0;
 		return;
 	}
 
-	// Classic / HL double shot (client.dll 0x10095fd0, server.dll 0x10241dee).
+	// Classic / HL double shot (client.dll 0x10095fd0).
 	if( m_iClip <= 1 )
 	{
 		Reload();
@@ -282,7 +280,6 @@ void CShotgun::SecondaryAttack( void )
 #endif
 	m_pPlayer->pev->effects = (int)( m_pPlayer->pev->effects ) | EF_MUZZLEFLASH;
 
-	// player "shoot" animation
 	m_pPlayer->SetAnimation( PLAYER_ATTACK1 );
 
 	Vector vecSrc = m_pPlayer->GetGunPosition();
@@ -296,19 +293,16 @@ void CShotgun::SecondaryAttack( void )
 	if( g_pGameRules->IsMultiplayer() )
 #endif
 	{
-		// tuned for deathmatch
 		vecDir = m_pPlayer->FireBulletsPlayer( 8, vecSrc, vecAiming, VECTOR_CONE_DM_DOUBLESHOTGUN, 2048, BULLET_PLAYER_BUCKSHOT, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
 	}
 	else
 	{
-		// untouched default single player
 		vecDir = m_pPlayer->FireBulletsPlayer( 12, vecSrc, vecAiming, VECTOR_CONE_10DEGREES, 2048, BULLET_PLAYER_BUCKSHOT, 0, 0, m_pPlayer->pev, m_pPlayer->random_seed );
 	}
 
 	PLAYBACK_EVENT_FULL( flags, m_pPlayer->edict(), m_usDoubleFire, 0.0f, g_vecZero, g_vecZero, EVENT_SPREAD( vecDir.x ), EVENT_SPREAD( vecDir.y ), 0, 0, 0, 0 );
 
 	if( !m_iClip && m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
-		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 
 	m_flPumpTime = gpGlobals->time + 0.95f;
