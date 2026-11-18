@@ -208,6 +208,12 @@ void CShotgun::SecondaryAttack( void )
 		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25f;
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
 		m_flPumpTime = 0;
+		// The Sven server reload (server.dll 0x102438c0) goes straight to
+		// inserting shells after firing the last one; it does not play the
+		// START_RELOAD forearm that HL's Reload() state 0 plays. Enter at
+		// state 1 so the client matches the server instead of animating the
+		// forearm before the reload.
+		m_fInSpecialReload = 1;
 		return;
 	}
 #endif
