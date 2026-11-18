@@ -195,11 +195,15 @@ void CShotgun::SecondaryAttack( void )
 	}
 
 #if CLIENT_DLL
-	// client.dll 0x10095f50: with one shell left Sven fires it as a single
-	// shot instead of trying to reload.
-	if( g_bSvenLocalWeapons && m_iClip == 1 )
+	// client.dll 0x10095f50: outside classic mode +attack2 is a rapid single
+	// shot (SPAS-like), not HL's double shot. With one shell left it fires the
+	// last shell; the normal auto-reload then takes over.
+	// Classic (HL1) mode keeps the original double-shot / reload behaviour.
+	if( g_bSvenLocalWeapons && !HUD_IsClassicMode() && m_iClip == 1 )
 	{
 		PrimaryAttack();
+		m_pPlayer->m_iWeaponVolume = 0x600;
+		m_pPlayer->m_iWeaponFlash = 0x100;
 		m_flNextPrimaryAttack = GetNextAttackDelay( 1.0f );
 		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.25f;
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
