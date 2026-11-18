@@ -813,11 +813,6 @@ void EV_SpinGauss( event_args_t *args )
 
 	pitch = args->iparam1;
 
-	// Late-restart suppression (proedu): a gaussspin start arriving for the
-	// LOCAL player while +attack2 is not held is always stale (an event that
-	// lost the race against our release-kill). Refuse to (re)start the loop;
-	// remote players keep pure server-driven behavior. See the Think
-	// failsafe in CHudAmmo for the kill side.
 	if( EV_IsLocal( idx ) && args->bparam1 && !( gHUD.m_iKeyBits & IN_ATTACK2 ) )
 		return;
 

@@ -125,9 +125,12 @@ void CShotgun::PrimaryAttack()
 
 	if( m_iClip <= 0 )
 	{
-		Reload();
-		if( m_iClip == 0 )
-			PlayEmptySound();
+		if( m_fInSpecialReload == 0 )
+		{
+			Reload();
+			if( m_iClip == 0 )
+				PlayEmptySound();
+		}
 		return;
 	}
 
@@ -196,14 +199,17 @@ void CShotgun::SecondaryAttack( void )
 
 	if( m_iClip <= 0 )
 	{
-		Reload();
-		PlayEmptySound();
+		if( m_fInSpecialReload == 0 )
+		{
+			Reload();
+			PlayEmptySound();
+		}
 		return;
 	}
 
-	// Sven client.dll 0x10095f50 / server.dll 0x10241d00:
-	// outside classic (HL1) mode, +attack2 is a rapid single shot (SPAS-like)
-	// for any clip > 0. In classic mode it keeps the original double shot.
+	if( m_fInSpecialReload != 0 )
+		return;
+
 	qboolean svenRapidSingle = FALSE;
 #if CLIENT_DLL
 	svenRapidSingle = g_bSvenLocalWeapons && !HUD_IsClassicMode();
@@ -214,7 +220,6 @@ void CShotgun::SecondaryAttack( void )
 
 	if( svenRapidSingle )
 	{
-		// Single-shot path (client.dll 0x10096217).
 		m_iClip--;
 
 		int flags;
@@ -265,8 +270,11 @@ void CShotgun::SecondaryAttack( void )
 	// Classic / HL double shot (client.dll 0x10095fd0).
 	if( m_iClip <= 1 )
 	{
-		Reload();
-		PlayEmptySound();
+		if( m_fInSpecialReload == 0 )
+		{
+			Reload();
+			PlayEmptySound();
+		}
 		return;
 	}
 
@@ -400,6 +408,8 @@ void CShotgun::ItemPostFrame( void )
 		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );
 		// client.dll 0x10095ae0 pumps (and ejects the shell) on the client
 		SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM );
+		if( m_iClip == 0 )
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
 		m_flPumpTime = 0;
 	}
 
