@@ -772,6 +772,7 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 	}
 	case WEAPON_SHOTGUN:
 		static_cast<CShotgun *>( weapon )->m_flNextReload = data->fuser1;
+		weapon->m_flPumpTime = data->m_flPumpTime;
 		weapon->m_fInSpecialReload = (int)data->fuser4;
 		break;
 	case WEAPON_GAUSS:
@@ -828,6 +829,7 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		break;
 	case WEAPON_SHOTGUN:
 		data->fuser1 = static_cast<CShotgun *>( weapon )->m_flNextReload;
+		data->m_flPumpTime = weapon->m_flPumpTime;
 		data->fuser4 = weapon->m_fInSpecialReload;
 		break;
 	case WEAPON_GAUSS:
@@ -977,7 +979,7 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 
 		pCurrent->m_fInReload = pfrom->m_fInReload;
 		pCurrent->m_fInSpecialReload = pfrom->m_fInSpecialReload;
-		//pCurrent->m_flPumpTime = pfrom->m_flPumpTime;
+		pCurrent->m_flPumpTime = pfrom->m_flPumpTime;
 		pCurrent->m_iClip = pfrom->m_iClip;
 		pCurrent->m_flNextPrimaryAttack	= pfrom->m_flNextPrimaryAttack;
 		pCurrent->m_flNextSecondaryAttack = pfrom->m_flNextSecondaryAttack;
@@ -1168,7 +1170,7 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 
 		pto->m_fInReload = pCurrent->m_fInReload;
 		pto->m_fInSpecialReload = pCurrent->m_fInSpecialReload;
-		//pto->m_flPumpTime = pCurrent->m_flPumpTime;
+		pto->m_flPumpTime = pCurrent->m_flPumpTime;
 		pto->m_iClip = pCurrent->m_iClip; 
 		pto->m_flNextPrimaryAttack = pCurrent->m_flNextPrimaryAttack;
 		pto->m_flNextSecondaryAttack = pCurrent->m_flNextSecondaryAttack;
@@ -1196,12 +1198,12 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		to->client.vuser4[1] = player.m_rgAmmo[pCurrent->m_iPrimaryAmmoType];
 		to->client.vuser4[2] = player.m_rgAmmo[pCurrent->m_iSecondaryAmmoType];
 
-/*		if( pto->m_flPumpTime != -9999.0f )
+		if( pto->m_flPumpTime != -9999.0f )
 		{
 			pto->m_flPumpTime -= cmd->msec / 1000.0f;
 			if( pto->m_flPumpTime < -0.001f )
 				pto->m_flPumpTime = -0.001f;
-		}*/
+		}
 
 		if( pto->m_fNextAimBonus < -1.0f )
 		{

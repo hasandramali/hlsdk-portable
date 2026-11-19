@@ -125,12 +125,9 @@ void CShotgun::PrimaryAttack()
 
 	if( m_iClip <= 0 )
 	{
-		if( m_fInSpecialReload == 0 )
-		{
-			Reload();
-			if( m_iClip == 0 )
-				PlayEmptySound();
-		}
+		Reload();
+		if( m_iClip == 0 )
+			PlayEmptySound();
 		return;
 	}
 
@@ -199,16 +196,10 @@ void CShotgun::SecondaryAttack( void )
 
 	if( m_iClip <= 0 )
 	{
-		if( m_fInSpecialReload == 0 )
-		{
-			Reload();
-			PlayEmptySound();
-		}
+		Reload();
+		PlayEmptySound();
 		return;
 	}
-
-	if( m_fInSpecialReload != 0 )
-		return;
 
 	qboolean svenRapidSingle = FALSE;
 #if CLIENT_DLL
@@ -270,11 +261,8 @@ void CShotgun::SecondaryAttack( void )
 	// Classic / HL double shot (client.dll 0x10095fd0).
 	if( m_iClip <= 1 )
 	{
-		if( m_fInSpecialReload == 0 )
-		{
-			Reload();
-			PlayEmptySound();
-		}
+		Reload();
+		PlayEmptySound();
 		return;
 	}
 
@@ -331,13 +319,13 @@ void CShotgun::Reload( void )
 	if( m_flNextReload > UTIL_WeaponTimeBase() )
 		return;
 
-	// don't reload until recoil is done
-	if( m_flNextPrimaryAttack > UTIL_WeaponTimeBase() )
-		return;
-
 	// check to see if we're ready to reload
 	if( m_fInSpecialReload == 0 )
 	{
+		// don't reload until recoil is done
+		if( m_flNextPrimaryAttack > UTIL_WeaponTimeBase() )
+			return;
+
 		SendWeaponAnim( SHOTGUN_START_RELOAD );
 		m_fInSpecialReload = 1;
 		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.7f;
@@ -405,12 +393,16 @@ void CShotgun::ItemPostFrame( void )
 	if( m_flPumpTime && m_flPumpTime < gpGlobals->time )
 	{
 		// play pumping sound
+#ifndef CLIENT_DLL
 		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );
+#endif
 		// client.dll 0x10095ae0 pumps (and ejects the shell) on the client
 		SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM );
+		m_flPumpTime = 0;
+
+		// Sven client 0x10095ae0: only when clip is empty.
 		if( m_iClip == 0 )
 			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
-		m_flPumpTime = 0;
 	}
 
 	CBasePlayerWeapon::ItemPostFrame();
@@ -442,9 +434,11 @@ void CShotgun::WeaponIdle( void )
 				SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM, 0.0f, 1 );
 				
 				// play cocking sound
+#ifndef CLIENT_DLL
 				EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );
+#endif
 				m_fInSpecialReload = 0;
-				m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.5f;
+				m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 1.0f;
 			}
 		}
 		else
