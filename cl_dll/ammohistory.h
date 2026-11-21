@@ -45,6 +45,8 @@ public:
 		memset( rgSlots, 0, sizeof rgSlots );
 		memset( riAmmo, 0, sizeof riAmmo );
 		memset( bSynced, 0, sizeof bSynced );
+		for( int i = 0; i < MAX_HUD_WEAPONS; i++ )
+			rgWeapons[i].iGridPos = -1;
 	}
 
 ///// WEAPON /////
@@ -67,6 +69,9 @@ public:
 	}
 	void AddWeapon( WEAPON *wp ) 
 	{ 
+		// A repeated WeaponList must not detach the record from the inventory
+		// cell PickupWeapon chose for it.
+		wp->iGridPos = rgWeapons[wp->iId].iGridPos;
 		rgWeapons[wp->iId] = *wp;	
 		LoadWeaponSprites( &rgWeapons[wp->iId] );
 	}
@@ -88,10 +93,12 @@ public:
 			if( !rgSlots[b][c] )
 			{
 				rgSlots[b][c] = wp;
+				wp->iGridPos = c;
 				return;
 			}
 		}
 		rgSlots[b][MAX_WEAPON_POSITIONS] = wp; // spill cell: in bounds, just not drawn
+		wp->iGridPos = MAX_WEAPON_POSITIONS;
 	}
 
 	void DropWeapon( WEAPON *wp )
@@ -107,6 +114,7 @@ public:
 					rgSlots[r][c] = NULL;
 			}
 		}
+		wp->iGridPos = -1;
 	}
 
 	void DropAllWeapons( void )
@@ -120,6 +128,16 @@ public:
 	}
 
 	WEAPON* GetWeaponSlot( int slot, int pos ) { return rgSlots[slot][pos]; }
+
+	// Cycle position of a weapon inside its bucket. PickupWeapon may have folded
+	// it away from the server's iSlotPos, and that wire value is rewritten by
+	// every WeaponList, so navigation must use the actual cell.
+	static int GridPos( const WEAPON *wp )
+	{
+		if( !wp )
+			return MAX_WEAPON_POSITIONS;
+		return wp->iGridPos >= 0 ? wp->iGridPos : wp->iSlotPos;
+	}
 
 	void LoadWeaponSprites( WEAPON* wp );
 	void LoadAllWeaponSprites( void );

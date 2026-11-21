@@ -307,6 +307,26 @@ void CRpgRocket::FollowThink( void )
 
 void CRpg::Reload( void )
 {
+#if CLIENT_DLL
+	// client.dll 0x10093250: Sven's client reloads (and predicts the
+	// animation) as soon as the clip is empty. The stock SDK's 0.5s attack
+	// delay and the "missile in flight + laser on" guard are not there; they
+	// made the client skip the prediction while the server still completed
+	// the reload, so the viewmodel never played its reload animation (the
+	// server skips svc_weaponanim for cl_lw clients).
+	if( m_iClip != 0 )
+		return;
+
+	if( DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
+	{
+		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+
+		// client.dll 0x10093324: the client predicts the designator's 2.1s
+		// suspension too, which the stock SDK only does on the server.
+		if( m_fSpotActive )
+			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 2.1f;
+	}
+#else
 	int iResult = 0;
 
 	// don't bother with any of this if don't need to reload.
@@ -345,6 +365,7 @@ void CRpg::Reload( void )
 
 	if( iResult )
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
+#endif
 }
 
 void CRpg::Spawn()

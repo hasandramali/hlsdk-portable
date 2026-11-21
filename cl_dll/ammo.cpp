@@ -68,16 +68,29 @@ extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int 
 	{
 		WEAPON *weapon = gWR.GetWeapon( id );
 		const unsigned char owned = weapons[id].m_iId == id;
-		// A weapon that isn't active gets no CurWeapon, so a picked-up one with
-		// rounds only in its clip would otherwise look empty and unselectable.
-		if( owned && weapon->iId )
-			weapon->iClip = weapons[id].m_iClip;
-		if( !weapon->iId || owned == gWR.bSynced[id] )
+
+		// No WeaponList for this id yet: nothing to insert. The per-frame sync
+		// below replays the ownership as soon as the record is registered.
+		if( !weapon->iId )
+		{
+			gWR.bSynced[id] = 0;
 			continue;
-		gWR.bSynced[id] = owned;
+		}
+
 		if( owned )
-			gWR.PickupWeapon( weapon );
-		else
+		{
+			// A weapon that isn't active gets no CurWeapon, so a picked-up one
+			// with rounds only in its clip would otherwise look empty.
+			weapon->iClip = weapons[id].m_iClip;
+			// Sven's inventory refresh (client.dll 0x10003be0) is declarative:
+			// every frame it inserts each owned weapon whose grid cell is empty.
+			// A one-shot edge transition could leave a weapon owned but absent
+			// (its cell cleared before its WeaponList re-registered the record),
+			// which made one weapon of a shared bucket impossible to cycle to.
+			if( weapon->iGridPos < 0 )
+				gWR.PickupWeapon( weapon );
+		}
+		else if( gWR.bSynced[id] || weapon->iGridPos >= 0 )
 		{
 			gWR.DropWeapon( weapon );
 			// a menu still pointing at a weapon that is gone swallows slot keys
@@ -86,6 +99,8 @@ extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int 
 			if( gpLastSel == weapon )
 				gpLastSel = NULL;
 		}
+
+		gWR.bSynced[id] = owned;
 	}
 }
 #if USE_VGUI
@@ -97,6 +112,45 @@ WEAPON *gpActiveSel;	// NULL means off, 1 means just the menu bar, otherwise
 WEAPON *gpLastSel;		// Last weapon menu selection 
 
 client_sprite_t *GetSpriteList(client_sprite_t *pList, const char *psz, int iRes, int iCount);
+
+// Sven script packs register their sprite directory with a trailing slash
+// ("ins2/shg/"). The stock client concatenates it verbatim and asks for
+// "sprites/ins2/shg//weapon_x.txt". GoldSrc tolerates the empty path component,
+// but Xash resolves every component against its directory cache and fails on
+// it, so the sprite list is never found and the weapon ends up with no icons.
+// Collapse leading/trailing/repeated separators so the same path is asked for.
+static const char *NormalizeSpriteDir( const char *dir, char *buf, size_t size )
+{
+	size_t len = 0;
+	bool lastSlash = false;
+
+	if( !dir )
+		dir = "";
+
+	while( *dir && len + 1 < size )
+	{
+		char c = *dir++;
+
+		if( c == '\\' )
+			c = '/';
+		if( c == '/' )
+		{
+			if( !len || lastSlash )
+				continue; // drop leading and repeated separators
+			lastSlash = true;
+		}
+		else
+			lastSlash = false;
+
+		buf[len++] = c;
+	}
+
+	if( len && buf[len - 1] == '/' )
+		len--; // drop trailing separator
+	buf[len] = '\0';
+
+	return buf;
+}
 
 static HSPRITE LoadWeaponSprite( const char *spriteDir, const char *spriteName )
 {
@@ -200,6 +254,8 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 		s_flWeaponSpriteRetry[pWeapon->iId] = gEngfuncs.GetClientTime() + 1.0f;
 		if( !pWeapon->szSpriteDir[0] && s_szCustSprDir[pWeapon->iId][0] )
 			strlcpy( pWeapon->szSpriteDir, s_szCustSprDir[pWeapon->iId], sizeof( pWeapon->szSpriteDir ) );
+		else if( pWeapon->szSpriteDir[0] )
+			NormalizeSpriteDir( pWeapon->szSpriteDir, pWeapon->szSpriteDir, sizeof( pWeapon->szSpriteDir ) );
 		if( !pWeapon->szSpriteRecord[0] && s_szWeaponSpr[pWeapon->iId][0] )
 			strlcpy( pWeapon->szSpriteRecord, s_szWeaponSpr[pWeapon->iId], sizeof( pWeapon->szSpriteRecord ) );
 	}
@@ -218,8 +274,10 @@ void WeaponsResource::LoadWeaponSprites( WEAPON *pWeapon )
 	pWeapon->hZoomedAutoaim = 0;
 	pWeapon->hScopeOverlay = 0;
 
-	const char *spriteDir = pWeapon->szSpriteDir[0] ? pWeapon->szSpriteDir :
-		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szCustSprDir[pWeapon->iId] : "" );
+	char normDir[sizeof( pWeapon->szSpriteDir )];
+	const char *spriteDir = NormalizeSpriteDir( pWeapon->szSpriteDir[0] ? pWeapon->szSpriteDir :
+		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szCustSprDir[pWeapon->iId] : "" ),
+		normDir, sizeof( normDir ) );
 	const char *spriteRecord = pWeapon->szSpriteRecord[0] ? pWeapon->szSpriteRecord :
 		( pWeapon->iId > 0 && pWeapon->iId < MAX_HUD_WEAPONS ? s_szWeaponSpr[pWeapon->iId] : "" );
 	const char *spriteList = spriteRecord[0] ? spriteRecord : pWeapon->szName;
@@ -703,7 +761,7 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 			PlaySound( "common/wpn_hudon.wav", 1 );
 			p = GetFirstPos( iSlot );
 
-			if( p && fastSwitch && !GetNextActivePos( p->iSlot, p->iSlotPos ) )
+			if( p && fastSwitch && !GetNextActivePos( p->iSlot, WeaponsResource::GridPos( p ) ) )
 			{
 				// only one weapon in this slot: switch to it right away
 				ServerCmd( p->szName );
@@ -714,7 +772,7 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 		else
 		{
 			PlaySound( "common/wpn_moveselect.wav", 1 );
-			p = GetNextActivePos( gpActiveSel->iSlot, gpActiveSel->iSlotPos );
+			p = GetNextActivePos( gpActiveSel->iSlot, WeaponsResource::GridPos( gpActiveSel ) );
 			if( !p )
 				p = GetFirstPos( iSlot );
 		}
@@ -737,7 +795,7 @@ void WeaponsResource::SelectSlot( int iSlot, int fAdvance, int iDirection )
 	if( gpLastSel && gpLastSel != (WEAPON *)1 && gpLastSel->iSlot == iSlot )
 	{
 		PlaySound( "common/wpn_moveselect.wav", 1 );
-		p = GetNextActivePos( iSlot, gpLastSel->iSlotPos );
+		p = GetNextActivePos( iSlot, WeaponsResource::GridPos( gpLastSel ) );
 		if( !p )
 			p = GetFirstPos( iSlot );
 	}
@@ -1381,11 +1439,11 @@ int CHudAmmo::MsgFunc_CustWeapon( const char *pszName, int iSize, void *pbuf )
 
 	if( iId > 0 && iId < MAX_HUD_WEAPONS && pszDir )
 	{
-		strlcpy( s_szCustSprDir[iId], pszDir, sizeof( s_szCustSprDir[iId] ) );
+		NormalizeSpriteDir( pszDir, s_szCustSprDir[iId], sizeof( s_szCustSprDir[iId] ) );
 		WEAPON *pWeapon = gWR.GetWeapon( iId );
 		if( pWeapon && pWeapon->iId == iId )
 		{
-			strlcpy( pWeapon->szSpriteDir, pszDir, sizeof( pWeapon->szSpriteDir ) );
+			strlcpy( pWeapon->szSpriteDir, s_szCustSprDir[iId], sizeof( pWeapon->szSpriteDir ) );
 			gWR.LoadWeaponSprites( pWeapon );
 		}
 	}
@@ -1489,7 +1547,7 @@ void CHudAmmo::UserCmd_NextWeapon( void )
 	int slot = 0;
 	if ( gpActiveSel )
 	{
-		pos = gpActiveSel->iSlotPos + 1;
+		pos = WeaponsResource::GridPos( gpActiveSel ) + 1;
 		slot = gpActiveSel->iSlot;
 	}
 
@@ -1531,7 +1589,7 @@ void CHudAmmo::UserCmd_PrevWeapon( void )
 	int slot = MAX_WEAPON_SLOTS - 1;
 	if( gpActiveSel )
 	{
-		pos = gpActiveSel->iSlotPos - 1;
+		pos = WeaponsResource::GridPos( gpActiveSel ) - 1;
 		slot = gpActiveSel->iSlot;
 	}
 	
