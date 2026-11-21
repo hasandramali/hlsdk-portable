@@ -772,7 +772,7 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 	}
 	case WEAPON_SHOTGUN:
 		static_cast<CShotgun *>( weapon )->m_flNextReload = data->fuser1;
-		weapon->m_flPumpTime = data->m_flPumpTime;
+		// m_flPumpTime is owned by the client prediction; see HUD_WeaponsPostThink.
 		weapon->m_fInSpecialReload = (int)data->fuser4;
 		break;
 	case WEAPON_GAUSS:
@@ -829,7 +829,6 @@ static void SvenEncodeWeaponData( int id, CBasePlayerWeapon *weapon, weapon_data
 		break;
 	case WEAPON_SHOTGUN:
 		data->fuser1 = static_cast<CShotgun *>( weapon )->m_flNextReload;
-		data->m_flPumpTime = weapon->m_flPumpTime;
 		data->fuser4 = weapon->m_fInSpecialReload;
 		break;
 	case WEAPON_GAUSS:
@@ -979,7 +978,11 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 
 		pCurrent->m_fInReload = pfrom->m_fInReload;
 		pCurrent->m_fInSpecialReload = pfrom->m_fInSpecialReload;
-		pCurrent->m_flPumpTime = pfrom->m_flPumpTime;
+		// m_flPumpTime is deliberately not synced from the server (the stock
+		// HL SDK also leaves this disabled). The local weapon object owns the
+		// predicted pump, so a snapshot that already pumped cannot drop the
+		// pump sound, and we never turn it into a relative countdown.
+		// pCurrent->m_flPumpTime = pfrom->m_flPumpTime;
 		pCurrent->m_iClip = pfrom->m_iClip;
 		pCurrent->m_flNextPrimaryAttack	= pfrom->m_flNextPrimaryAttack;
 		pCurrent->m_flNextSecondaryAttack = pfrom->m_flNextSecondaryAttack;
@@ -1198,12 +1201,10 @@ void HUD_WeaponsPostThink( local_state_s *from, local_state_s *to, usercmd_t *cm
 		to->client.vuser4[1] = player.m_rgAmmo[pCurrent->m_iPrimaryAmmoType];
 		to->client.vuser4[2] = player.m_rgAmmo[pCurrent->m_iSecondaryAmmoType];
 
-		if( pto->m_flPumpTime != -9999.0f )
-		{
-			pto->m_flPumpTime -= cmd->msec / 1000.0f;
-			if( pto->m_flPumpTime < -0.001f )
-				pto->m_flPumpTime = -0.001f;
-		}
+		// m_flPumpTime stays an absolute time (see CShotgun::ItemPostFrame).
+		// Counting it down here turned it into a relative value, made the
+		// pump fire on the very next command and then forever at -0.001.
+		// (Stock HL SDK keeps this disabled for the same reason.)
 
 		if( pto->m_fNextAimBonus < -1.0f )
 		{

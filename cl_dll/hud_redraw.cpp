@@ -285,6 +285,13 @@ const unsigned char colors[8][3] =
 
 int CHud::DrawSprite( int x, int y, HSPRITE sprite, wrect_t *rc, int r, int g, int b, int frame, SPR_MODE mode )
 {
+	// HSPRITE 0 means the sprite failed to load. pfnSPR_Set() ignores an
+	// invalid handle and leaves the last bound sprite in place, so drawing
+	// here paints an unrelated sprite through this rect ("random" icons).
+	// Skip the call entirely and still advance the layout like a draw does.
+	if( !sprite )
+		return rc ? x + rc->right - rc->left : x;
+
 	gEngfuncs.pfnSPR_Set( sprite, r, g, b );
 
 	switch( mode )

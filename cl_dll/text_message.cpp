@@ -201,6 +201,17 @@ int CHudTextMessage::MsgFunc_TextMsg( const char *pszName, int iSize, void *pbuf
 		return 1;
 #endif
 
+	// Sven sends the "mode not supported" vote feedback as a TextMsg with
+	// HUD_PRINTCONSOLE (verified in server.dll: RegUserMsg("TextMsg") then a
+	// TextMsg with dest 2), so it only ever reached the console. Promote those
+	// two exact notices to the center of the screen so the player actually sees
+	// why the vote did nothing. The engine's svc_print routing in cl_parse.c
+	// covers the other possible wire path.
+	if( msg_dest == HUD_PRINTCONSOLE &&
+	    ( strstr( szBuf[0], "Classic mode is not supported on this map." ) ||
+	      strstr( szBuf[0], "Survival mode is not supported on this map." )))
+		msg_dest = HUD_PRINTCENTER;
+
 	switch( msg_dest )
 	{
 	case HUD_PRINTCENTER:

@@ -593,6 +593,30 @@ void CHudAmmo::Think( void )
 		}
 	}
 
+	// cl_lw 1 fills the inventory straight from weapon_data, which can run
+	// before a custom weapon's CustWeapon/WeaponSpr pair has arrived. Retry
+	// every registered weapon whose sprite list is still missing, not only the
+	// active one (UpdateCrosshair covers the active weapon). Without this a
+	// non-active custom entry keeps HSPRITE 0 for the whole session.
+	{
+		float now = gEngfuncs.GetClientTime();
+
+		for( int i = MAX_HUD_WEAPONS - 1; i > 0; i-- )
+		{
+			WEAPON *p = gWR.GetWeapon( i );
+
+			if( !p || !p->iId || s_bWeaponSpritesLoaded[i] )
+				continue;
+			if( !( p->szName[0] || p->szSpriteRecord[0] || s_szWeaponSpr[i][0] ))
+				continue;
+
+			float retry = s_flWeaponSpriteRetry[i];
+
+			if( now >= retry || now < retry - 1.0f )
+				gWR.LoadWeaponSprites( p );
+		}
+	}
+
 	if( !gpActiveSel )
 		return;
 
@@ -1310,9 +1334,26 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	if( Weapon.iAmmo2Type >= 0 && Weapon.iMax2 == 0 )
 		return 0;*/
 
-	strlcpy( Weapon.szSpriteRecord, Weapon.szName, sizeof( Weapon.szSpriteRecord ) );
-	strlcpy( s_szWeaponSpr[Weapon.iId], Weapon.szName, sizeof( s_szWeaponSpr[Weapon.iId] ) );
-	s_szCustSprDir[Weapon.iId][0] = '\0';
+	// WeaponSpr can arrive before this WeaponList for a handed-out custom
+	// weapon; keep its record, otherwise seed it from the class name.
+	if( s_szWeaponSpr[Weapon.iId][0] )
+	{
+		strlcpy( Weapon.szSpriteRecord, s_szWeaponSpr[Weapon.iId], sizeof( Weapon.szSpriteRecord ));
+	}
+	else
+	{
+		strlcpy( Weapon.szSpriteRecord, Weapon.szName, sizeof( Weapon.szSpriteRecord ) );
+		strlcpy( s_szWeaponSpr[Weapon.iId], Weapon.szName, sizeof( s_szWeaponSpr[Weapon.iId] ) );
+	}
+	// A custom weapon can be handed out with CustWeapon before this WeaponList
+	// is sent (the give path sends it immediately; WeaponList follows on the
+	// next client-data update). Previously the dir was wiped here, so AddWeapon
+	// looked for "sprites/<name>.txt", failed, and left the entry with zero
+	// handles. Under cl_lw 1 HUD_SvenWeaponData has already put customs in the
+	// inventory, so those zero handles were drawn as the previously bound
+	// sprite. Keep the dir and let this WeaponList load the real list.
+	if( s_szCustSprDir[Weapon.iId][0] )
+		strlcpy( Weapon.szSpriteDir, s_szCustSprDir[Weapon.iId], sizeof( Weapon.szSpriteDir ));
 	gWR.AddWeapon( &Weapon );
 
 	// TEMP-DIAG (minigun reserve): confirm the ammo types WeaponList carries

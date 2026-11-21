@@ -390,19 +390,25 @@ void CShotgun::Reload( void )
 
 void CShotgun::ItemPostFrame( void )
 {
-	if( m_flPumpTime && m_flPumpTime < gpGlobals->time )
+	// m_flPumpTime holds an absolute time; zero means nothing is pending.
+	// It used to be counted down during prediction and clamped to -0.001,
+	// which this check treated as "due" on every frame and sprayed shells.
+	if( m_flPumpTime > 0.0f && m_flPumpTime <= gpGlobals->time )
 	{
 		// play pumping sound
 #ifndef CLIENT_DLL
 		EMIT_SOUND_DYN( ENT( m_pPlayer->pev ), CHAN_ITEM, "weapons/scock1.wav", 1, ATTN_NORM, 0, 95 + RANDOM_LONG( 0, 0x1f ) );
 #endif
-		// client.dll 0x10095ae0 pumps (and ejects the shell) on the client
-		SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM );
-		m_flPumpTime = 0;
+		// The spent shell is already ejected by the fire event, so the pump
+		// only plays the sound (noShell) to keep one shell per shot, exactly
+		// like cl_lw 0. client.dll 0x10095ae0 is the per-frame pump helper.
+		SvenPredictedSound( m_pPlayer, 19, 1.0f, CHAN_ITEM, 0.0f, 1 );
+		m_flPumpTime = 0.0f;
 
-		// Sven client 0x10095ae0: only when clip is empty.
+		// Sven client 0x10095ae0: only when clip is empty, and it sets the
+		// idle field to GetTime() + 0.25 (const 0x10122360 = 0.25 as a double).
 		if( m_iClip == 0 )
-			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
+			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.25f;
 	}
 
 	CBasePlayerWeapon::ItemPostFrame();
