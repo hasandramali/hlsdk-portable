@@ -309,13 +309,8 @@ void CRpg::Reload( void )
 {
 #if CLIENT_DLL
 	// client.dll 0x10093250: Sven's client reloads (and predicts the
-	// animation) as soon as the clip is empty. The stock SDK's 0.5s attack
-	// delay and the "missile in flight + laser on" guard are not there; they
-	// made the client skip the prediction while the server still completed
 	// the reload, so the viewmodel never played its reload animation (the
 	// server skips svc_weaponanim for cl_lw clients).
-	if( m_iClip != 0 )
-		return;
 
 	if( DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
 	{
