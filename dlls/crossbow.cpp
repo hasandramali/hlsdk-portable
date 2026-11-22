@@ -344,12 +344,11 @@ void CCrossbow::PrimaryAttack( void )
 	}
 
 	FireBolt();
-}
-
-// this function only gets called in multiplayer
+}	// this function only gets called in multiplayer
 void CCrossbow::FireSniperBolt()
 {
-	m_flNextPrimaryAttack = GetNextAttackDelay( 0.75f );
+	m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.75f;
+
 
 	if( m_iClip == 0 )
 	{
@@ -464,7 +463,7 @@ void CCrossbow::FireBolt()
 		// HEV suit - indicate out of ammo condition
 		m_pPlayer->SetSuitUpdate( "!HEV_AMO0", FALSE, 0 );
 
-	m_flNextPrimaryAttack = GetNextAttackDelay( 0.75f );
+	m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.75f;
 
 	m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.75f;
 
