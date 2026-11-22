@@ -330,7 +330,7 @@ void CShotgun::Reload( void )
 		m_fInSpecialReload = 1;
 		m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + 0.7f;
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.7f;
-		m_flNextPrimaryAttack = GetNextAttackDelay( 0.7f );
+		m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.7f;
 		m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.7f;
 		return;
 	}
@@ -356,14 +356,14 @@ void CShotgun::Reload( void )
 		{
 			m_flNextReload = UTIL_WeaponTimeBase() + 0.5f;
 			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.5f;
-			m_flNextPrimaryAttack = GetNextAttackDelay( 0.7f );
+			m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.7f;
 			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.7f;
 		}
 		else
 		{
 			m_flNextReload = UTIL_WeaponTimeBase() + 0.3f;
 			m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + 0.3f;
-			m_flNextPrimaryAttack = GetNextAttackDelay( 0.5f );
+			m_flNextPrimaryAttack = UTIL_WeaponTimeBase() + 0.5f;
 			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 0.5f;
 		}
 

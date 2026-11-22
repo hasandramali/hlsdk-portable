@@ -312,7 +312,7 @@ void CRpg::Reload( void )
 	// the reload, so the viewmodel never played its reload animation (the
 	// server skips svc_weaponanim for cl_lw clients).
 
-	if( DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
+	if( m_iClip == 0 || DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
 	{
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
 
@@ -320,6 +320,10 @@ void CRpg::Reload( void )
 		// suspension too, which the stock SDK only does on the server.
 		if( m_fSpotActive )
 			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 2.1f;
+		// client.dll 0x10093250 (non-classic): set world model to p_rpg_r.mdl
+		// for third-person reload animation, only in non-classic mode
+		if( !HUD_IsClassicMode() )
+			pev->weaponmodel = MAKE_STRING( "models/p_rpg_r.mdl" );
 	}
 #else
 	int iResult = 0;
