@@ -83,12 +83,11 @@ extern "C" void DLLEXPORT HUD_SvenWeaponData( const weapon_data_t *weapons, int 
 			// with rounds only in its clip would otherwise look empty.
 			weapon->iClip = weapons[id].m_iClip;
 			// Sven's inventory refresh (client.dll 0x10003be0) is declarative:
-			// every frame it inserts each owned weapon whose grid cell is empty.
-			// A one-shot edge transition could leave a weapon owned but absent
-			// (its cell cleared before its WeaponList re-registered the record),
-			// which made one weapon of a shared bucket impossible to cycle to.
-			if( weapon->iGridPos < 0 )
-				gWR.PickupWeapon( weapon );
+			// every frame each owned weapon is placed in its exact server cell
+			// if that cell is free. PickupWeapon is idempotent, so this also
+			// restores a record whose cell was cleared before its WeaponList
+			// re-registered it.
+			gWR.PickupWeapon( weapon );
 		}
 		else if( gWR.bSynced[id] || weapon->iGridPos >= 0 )
 		{

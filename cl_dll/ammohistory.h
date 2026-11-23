@@ -69,36 +69,44 @@ public:
 	}
 	void AddWeapon( WEAPON *wp ) 
 	{ 
-		// A repeated WeaponList must not detach the record from the inventory
-		// cell PickupWeapon chose for it.
-		wp->iGridPos = rgWeapons[wp->iId].iGridPos;
+		WEAPON *dst = &rgWeapons[wp->iId];
+
+		// Sven client.dll 0x100046a0 only refreshes the record; which cell it
+		// occupies is decided by the per-frame inventory pass
+		// (0x10003be0) from iSlot/iSlotPos. If the server moved the weapon to
+		// a different cell, detach the old one so it can't linger twice.
+		if( dst->iId && ( dst->iSlot != wp->iSlot || dst->iSlotPos != wp->iSlotPos ))
+			DropWeapon( dst );
+
 		rgWeapons[wp->iId] = *wp;	
+		rgWeapons[wp->iId].iGridPos = -1; // let the inventory pass place it
 		LoadWeaponSprites( &rgWeapons[wp->iId] );
 	}
 
 	void PickupWeapon( WEAPON *wp )
 	{
-		// Clamp out-of-range server values: writing past rgSlots would land
-		// in riAmmo and corrupt the ammo counts.
+		// Sven client.dll 0x10003be0 puts an owned weapon in the exact cell
+		// the server sent (rgSlots[iSlot][iSlotPos]) and never folds it into
+		// the first free position. Folding made the slot order depend on
+		// drop/pickup timing; the server's layout must win.
 		int b = wp->iSlot;
-		int p, k;
-		if( b < 0 ) b = 0;
-		if( b >= MAX_WEAPON_SLOTS ) b = MAX_WEAPON_SLOTS - 1;
-		p = wp->iSlotPos;
-		if( p < 0 ) p = 0;
-		if( p >= MAX_WEAPON_POSITIONS ) p = MAX_WEAPON_POSITIONS - 1;
-		for( k = 0; k < MAX_WEAPON_POSITIONS; k++ )
+		int p = wp->iSlotPos;
+
+		if( b < 0 || b >= MAX_WEAPON_SLOTS || p < 0 || p >= MAX_WEAPON_POSITIONS )
 		{
-			int c = ( p + k ) % MAX_WEAPON_POSITIONS;
-			if( !rgSlots[b][c] )
-			{
-				rgSlots[b][c] = wp;
-				wp->iGridPos = c;
-				return;
-			}
+			wp->iGridPos = -1;
+			return;
 		}
-		rgSlots[b][MAX_WEAPON_POSITIONS] = wp; // spill cell: in bounds, just not drawn
-		wp->iGridPos = MAX_WEAPON_POSITIONS;
+
+		if( !rgSlots[b][p] || rgSlots[b][p] == wp )
+		{
+			rgSlots[b][p] = wp;
+			wp->iGridPos = p;
+		}
+		else
+		{
+			wp->iGridPos = -1; // cell owned by another record; Sven skips it
+		}
 	}
 
 	void DropWeapon( WEAPON *wp )
@@ -129,9 +137,9 @@ public:
 
 	WEAPON* GetWeaponSlot( int slot, int pos ) { return rgSlots[slot][pos]; }
 
-	// Cycle position of a weapon inside its bucket. PickupWeapon may have folded
-	// it away from the server's iSlotPos, and that wire value is rewritten by
-	// every WeaponList, so navigation must use the actual cell.
+	// Cycle position of a weapon inside its bucket. AddWeapon resets iGridPos so
+	// every WeaponList lets the inventory pass re-place the record; fall back to
+	// the server's iSlotPos until that happens.
 	static int GridPos( const WEAPON *wp )
 	{
 		if( !wp )
