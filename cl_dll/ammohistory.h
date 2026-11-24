@@ -98,10 +98,33 @@ public:
 			return;
 		}
 
+		// A record may already sit in another cell of this row (it was folded
+		// into a free position before); detach it so re-placing can't leave a
+		// second reference behind.
+		if( wp->iGridPos >= 0 && wp->iGridPos < MAX_WEAPON_POSITIONS && wp->iGridPos != p
+			&& rgSlots[b][wp->iGridPos] == wp )
+			rgSlots[b][wp->iGridPos] = NULL;
+
 		if( !rgSlots[b][p] || rgSlots[b][p] == wp )
 		{
 			rgSlots[b][p] = wp;
 			wp->iGridPos = p;
+		}
+		else if( wp->bStockSlot )
+		{
+			// A custom weapon claims the pinned stock cell (a mod may put its
+			// own weapon at 0/0). Sven would skip the stock weapon and hide it
+			// from the HUD, so take the next free position in the same row.
+			for( int alt = 0; alt < MAX_WEAPON_POSITIONS; alt++ )
+			{
+				if( !rgSlots[b][alt] )
+				{
+					rgSlots[b][alt] = wp;
+					wp->iGridPos = alt;
+					return;
+				}
+			}
+			wp->iGridPos = -1;
 		}
 		else
 		{

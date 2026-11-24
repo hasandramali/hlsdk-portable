@@ -308,7 +308,14 @@ void CRpgRocket::FollowThink( void )
 void CRpg::Reload( void )
 {
 #if CLIENT_DLL
-	if( m_iClip == 0 || DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
+	// Call DefaultReload first: the clip being empty is the RPG's normal
+	// reload state, so an `m_iClip == 0 ||` short-circuit skipped the reload
+	// (no RPG_RELOAD animation and no predicted m_fInReload) exactly when it
+	// was needed. The server still refilled the clip through weapon_data, so
+	// the reload happened without the viewmodel animation.
+	const BOOL bReloading = DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 );
+
+	if( bReloading || m_iClip == 0 )
 	{
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
 

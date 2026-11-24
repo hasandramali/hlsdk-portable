@@ -43,6 +43,62 @@ static bool LocalWeaponsEnabled( void )
 extern int g_bSvenLocalWeapons;
 extern WEAPON *gpActiveSel, *gpLastSel;
 
+// Modded servers routinely send the stock Sven weapons in a different HUD
+// cell (the medkit ending up before the crowbar in slot 1 is the common
+// report), because the HUD takes the cell straight from WeaponList. Pin the
+// row of the stock weapons by class name instead; ids vary per mod while the
+// class name is stable, and custom weapons keep the server's cell. This is
+// the cl_lw 1 counterpart of CL_WEAPONLISTFIX_FIXED_SLOTS in the engine,
+// which pins the cl_lw 0 weapon list. The position inside a row is the
+// entry's index among the entries sharing that row, so the stock order is
+// also stable there.
+typedef struct { const char *name; int row; } stockweapon_slot_t;
+static const stockweapon_slot_t s_StockWeaponSlots[] =
+{
+	{ "weapon_crowbar", 0 }, { "weapon_pipewrench", 0 }, { "weapon_medkit", 0 },
+	{ "weapon_knife", 0 }, { "weapon_grapple", 0 },
+	{ "weapon_9mmhandgun", 1 }, { "weapon_357", 1 }, { "weapon_eagle", 1 },
+	{ "weapon_uzi", 1 },
+	{ "weapon_9mmAR", 2 }, { "weapon_shotgun", 2 }, { "weapon_crossbow", 2 },
+	{ "weapon_m16", 2 },
+	{ "weapon_rpg", 3 }, { "weapon_gauss", 3 }, { "weapon_egon", 3 },
+	{ "weapon_hornetgun", 3 },
+	{ "weapon_handgrenade", 4 }, { "weapon_satchel", 4 }, { "weapon_tripmine", 4 },
+	{ "weapon_snark", 4 },
+	{ "weapon_sniperrifle", 5 }, { "weapon_m249", 5 }, { "weapon_sporelauncher", 5 },
+	{ "weapon_displacer", 5 },
+};
+
+static bool GetStockWeaponSlot( const char *name, int *slot, int *pos )
+{
+	int count = sizeof( s_StockWeaponSlots ) / sizeof( s_StockWeaponSlots[0] );
+	int found = -1, fixedPos = 0;
+
+	if( !name || !name[0] )
+		return false;
+
+	for( int i = 0; i < count; i++ )
+	{
+		if( !stricmp( s_StockWeaponSlots[i].name, name ))
+		{
+			found = i;
+			break;
+		}
+	}
+	if( found < 0 )
+		return false;
+
+	for( int i = 0; i < found; i++ )
+	{
+		if( s_StockWeaponSlots[i].row == s_StockWeaponSlots[found].row )
+			fixedPos++;
+	}
+
+	if( slot ) *slot = s_StockWeaponSlots[found].row;
+	if( pos ) *pos = fixedPos;
+	return true;
+}
+
 // The ammo types of Sven weapons that do not send them in weapon_data.
 int HUD_WeaponSecondaryAmmoType( int id )
 {
@@ -1382,6 +1438,13 @@ strlcpy( Weapon.szName, READ_STRING(), sizeof( Weapon.szName ));
 	if( Weapon.iSlot >= MAX_WEAPON_SLOTS ) Weapon.iSlot = MAX_WEAPON_SLOTS - 1;
 	if( Weapon.iSlotPos < 0 ) Weapon.iSlotPos = 0;
 	if( Weapon.iSlotPos >= MAX_WEAPON_POSITIONS ) Weapon.iSlotPos = MAX_WEAPON_POSITIONS - 1;
+
+	// Under cl_lw 1 the HUD owns the inventory and takes every cell from this
+	// message, so a mod's reshuffled stock layout shows up verbatim. Pin the
+	// stock weapons to their canonical row instead.
+	if( LocalWeaponsEnabled() && GetStockWeaponSlot( Weapon.szName, &Weapon.iSlot, &Weapon.iSlotPos ))
+		Weapon.bStockSlot = true;
+
 	if( Weapon.iAmmoType < -1 || Weapon.iAmmoType >= MAX_AMMO_TYPES )
 		return 0;
 	if( Weapon.iAmmo2Type < -1 || Weapon.iAmmo2Type >= MAX_AMMO_TYPES )

@@ -37,6 +37,7 @@ struct WEAPON
 	int		iGridPos;		// actual rgSlots column (-1 = not in the inventory grid).
 					// PickupWeapon places the weapon in its exact server iSlotPos
 					// cell (Sven 0x10003be0), so this normally equals iSlotPos.
+	int		bStockSlot;	// cell was pinned to the stock weapon row, not the server's
 	int		iFlags;
 	int		iId;
 	int		iClip;
