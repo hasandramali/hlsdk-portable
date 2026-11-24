@@ -308,46 +308,25 @@ void CRpgRocket::FollowThink( void )
 void CRpg::Reload( void )
 {
 #if CLIENT_DLL
-	// client.dll 0x10093250: Sven's client reloads (and predicts the
-	// the reload, so the viewmodel never played its reload animation (the
-	// server skips svc_weaponanim for cl_lw clients).
-
 	if( m_iClip == 0 || DefaultReload( RPG_MAX_CLIP, RPG_RELOAD, 2 ))
 	{
 		m_flTimeWeaponIdle = UTIL_WeaponTimeBase() + UTIL_SharedRandomFloat( m_pPlayer->random_seed, 10, 15 );
 
-		// client.dll 0x10093324: the client predicts the designator's 2.1s
-		// suspension too, which the stock SDK only does on the server.
 		if( m_fSpotActive )
 			m_flNextSecondaryAttack = UTIL_WeaponTimeBase() + 2.1f;
-		// client.dll 0x10093250 (non-classic): set world model to p_rpg_r.mdl
-		// for third-person reload animation, only in non-classic mode
 		if( !HUD_IsClassicMode() )
 			pev->weaponmodel = MAKE_STRING( "models/p_rpg_r.mdl" );
 	}
 #else
 	int iResult = 0;
 
-	// don't bother with any of this if don't need to reload.
 	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 || m_iClip == RPG_MAX_CLIP )
 		return;
 
-	// because the RPG waits to autoreload when no missiles are active while  the LTD is on, the
-	// weapons code is constantly calling into this function, but is often denied because 
-	// a) missiles are in flight, but the LTD is on
-	// or
-	// b) player is totally out of ammo and has nothing to switch to, and should be allowed to
-	//    shine the designator around
-	//
-	// Set the next attack time into the future so that WeaponIdle will get called more often
-	// than reload, allowing the RPG LTD to be updated
-	
 	m_flNextPrimaryAttack = GetNextAttackDelay( 0.5f );
 
 	if( m_cActiveRockets && m_fSpotActive )
 	{
-		// no reloading when there are active missiles tracking the designator.
-		// ward off future autoreload attempts by setting next attack time into the future for a bit. 
 		return;
 	}
 

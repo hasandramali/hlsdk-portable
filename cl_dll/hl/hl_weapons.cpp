@@ -343,16 +343,23 @@ void CBasePlayerWeapon::ItemPostFrame( void )
 	if( ( m_fInReload ) && ( m_pPlayer->m_flNextAttack <= 0.0f ) )
 	{
 #if 1
-		// complete the reload. 
-		ItemInfo itemInfo;
-		memset( &itemInfo, 0, sizeof( itemInfo ) );
-		GetItemInfo( &itemInfo );
+		// Complete the reload. Sven's client (client.dll 0x1002b640) clamps to
+		// ItemInfoArray[m_iId].iMaxClip, i.e. the value Reload() just wrote
+		// (the 9mmAR is 30 non-classic / 50 classic), not GetItemInfo()'s
+		// stock 50. Using GetItemInfo meant a non-classic 9mmAR overfilled its
+		// 30-round clip to 50 on the first reload; the next Reload() then saw
+		// a full clip, returned early and never played the reload animation
+		// while the server still refilled (mp5.cpp: m_iClip >= clip).
+		int j = Q_min( iMaxClip() - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] );
 
-		int j = Q_min( itemInfo.iMaxClip - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] );
-
-		// Add them to the clip
-		m_iClip += j;
-		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= j;
+		// Guard against a stale/zero ItemInfoArray entry so a bad max clip
+		// can't turn the reload into negative ammo (Sven never hits this
+		// because Reload() rewrites the clip before setting m_fInReload).
+		if( j > 0 )
+		{
+			m_iClip += j;
+			m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] -= j;
+		}
 #else
 		m_iClip += 10;
 #endif
