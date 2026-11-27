@@ -36,11 +36,12 @@ public:
 		memset( p, 0, sizeof( *p ));
 		p->pszName = STRING( pev->classname );
 		p->iId = m_iId = Id();
-		p->iMaxClip = -1;
+		p->iMaxClip = ClipSize();
 		return 1;
 	}
 
 	virtual int Id( void ) = 0;
+	virtual int ClipSize( void ) { return WEAPON_NOCLIP; }
 	virtual void Decode( const weapon_data_t *data ) {}
 	virtual void Encode( weapon_data_t *data ) {}
 
@@ -105,8 +106,9 @@ protected:
 	bool StartStagedReload( int maxClip, int anim, float delay, int body )
 	{
 		const int want = maxClip - m_iClip;
-		if( ReserveAmmo() <= 0 || want <= 0 )
+		if( m_fInReload || ReserveAmmo() <= 0 || want <= 0 )
 			return false;
+		ItemInfoArray[m_iId].iMaxClip = maxClip;
 		m_pPlayer->m_flNextAttack = Now() + delay;
 		SendWeaponAnim( anim, 1, body );
 		m_fInReload = TRUE;
@@ -125,6 +127,7 @@ class CSvenEagle : public CSvenWeapon
 public:
 	CSvenEagle() : m_bLaserInstalled( false ), m_bLaser( false ) {}
 	int Id( void ) { return 27; }
+	int ClipSize( void ) { return CLIP; }
 	void Precache( void ) { CSvenWeapon::Precache(); m_usFire = PRECACHE_EVENT( 1, "events/deagle.sc" ); }
 	void Decode( const weapon_data_t *d ) { m_bLaserInstalled = d->iuser3 != 0; m_bLaser = d->m_fInZoom != 0; }
 	void Encode( weapon_data_t *d ) { d->iuser3 = m_bLaserInstalled; d->m_fInZoom = m_bLaser; }
@@ -209,6 +212,7 @@ class CSvenM249 : public CSvenWeapon
 public:
 	CSvenM249() : m_bBelt( false ), m_iReloadStage( 0 ) {}
 	int Id( void ) { return 24; }
+	int ClipSize( void ) { return CLIP; }
 	void Precache( void )
 	{
 		CSvenWeapon::Precache();
@@ -291,6 +295,7 @@ class CSvenSniper : public CSvenWeapon
 public:
 	CSvenSniper() : m_bZoomed( false ), m_iReloadStage( 0 ) {}
 	int Id( void ) { return 23; }
+	int ClipSize( void ) { return CLIP; }
 	void Precache( void ) { CSvenWeapon::Precache(); m_usFire = PRECACHE_EVENT( 1, "events/sniperrifle.sc" ); }
 	void Decode( const weapon_data_t *d ) { m_bZoomed = d->m_fInZoom != 0; m_iReloadStage = (int)d->fuser1; }
 	void Encode( weapon_data_t *d ) { d->m_fInZoom = m_bZoomed; d->fuser1 = (float)m_iReloadStage; }
@@ -400,6 +405,7 @@ class CSvenM16 : public CSvenWeapon
 public:
 	CSvenM16() : m_flBurst( 0 ), m_iGrenades( 0 ), m_iGrenadeLoaded( 1 ), m_iPendingAnim( 0 ) {}
 	int Id( void ) { return 25; }
+	int ClipSize( void ) { return CLIP; }
 	void Precache( void ) { CSvenWeapon::Precache(); m_usFire = PRECACHE_EVENT( 1, "events/m16a2.sc" ); }
 	void Decode( const weapon_data_t *d ) { m_iGrenades = d->iuser3; m_iPendingAnim = (int)d->fuser1; m_flBurst = d->fuser2; }
 	void Encode( weapon_data_t *d ) { d->iuser3 = m_iGrenades; d->fuser1 = (float)m_iPendingAnim; d->fuser2 = m_flBurst; }
@@ -514,6 +520,7 @@ class CSvenUzi : public CSvenWeapon
 public:
 	CSvenUzi() : m_bAkimbo( false ), m_iLeftClip( 0 ) {}
 	int Id( void ) { return 17; }
+	int ClipSize( void ) { return CLIP; }
 	void Precache( void )
 	{
 		CSvenWeapon::Precache();
@@ -523,6 +530,22 @@ public:
 	void Decode( const weapon_data_t *d ) { m_bAkimbo = d->iuser3 != 0; m_iLeftClip = d->iuser4; }
 	void Encode( weapon_data_t *d ) { d->iuser3 = m_bAkimbo; d->iuser4 = m_iLeftClip; }
 	BOOL Deploy( void ) { return DefaultDeploy( "models/v_uzi.mdl", "models/p_uzi.mdl", m_bAkimbo ? 16 : 4, "mp5" ); }
+
+	void ItemPostFrame( void )
+	{
+		if( m_bAkimbo && m_fInReload && m_pPlayer->m_flNextAttack <= Now() )
+		{
+			int &reserve = m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType];
+			const int right = Q_min( Q_max( CLIP - m_iClip, 0 ), Q_max( reserve, 0 ));
+			m_iClip += right;
+			reserve -= right;
+			const int left = Q_min( Q_max( CLIP - m_iLeftClip, 0 ), Q_max( reserve, 0 ));
+			m_iLeftClip += left;
+			reserve -= left;
+			m_fInReload = FALSE;
+		}
+		CSvenWeapon::ItemPostFrame();
+	}
 
 	void PrimaryAttack( void )
 	{
@@ -703,6 +726,7 @@ class CSvenSporeLauncher : public CSvenWeapon
 public:
 	CSvenSporeLauncher() : m_iReload( RELOAD_NONE ), m_flNextReload( 0 ) {}
 	int Id( void ) { return 26; }
+	int ClipSize( void ) { return CLIP; }
 	void Decode( const weapon_data_t *d ) { m_iReload = d->iuser3; }
 	void Encode( weapon_data_t *d ) { d->iuser3 = m_iReload; }
 

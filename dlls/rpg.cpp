@@ -491,7 +491,8 @@ void CRpg::PrimaryAttack()
 #else
 	flags = 0;
 #endif
-		PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usRpg );
+		if( !g_bSvenLocalWeapons )
+			PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usRpg );
 
 		if( g_bSvenLocalWeapons )
 		{

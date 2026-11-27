@@ -249,7 +249,8 @@ void CMP5::SecondaryAttack( void )
 #else
 	flags = 0;
 #endif
-	PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usMP52 );
+	if( !g_bSvenLocalWeapons )
+		PLAYBACK_EVENT( flags, m_pPlayer->edict(), m_usMP52 );
 
 	if( g_bSvenLocalWeapons )
 	{

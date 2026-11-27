@@ -67,6 +67,10 @@ void CGlock::Precache( void )
 
 	m_usFireGlock1 = PRECACHE_EVENT( 1, "events/glock1.sc" );
 	m_usFireGlock2 = PRECACHE_EVENT( 1, "events/glock2.sc" );
+#if CLIENT_DLL
+	if( !m_usFireGlock1 )
+		m_usFireGlock1 = m_usFireGlock2;
+#endif
 }
 
 int CGlock::GetItemInfo( ItemInfo *p )

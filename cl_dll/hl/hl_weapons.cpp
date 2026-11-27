@@ -136,12 +136,13 @@ void HUD_PrepEntity( CBaseEntity *pEntity, CBasePlayer *pWeaponOwner )
 
 	if( pWeaponOwner )
 	{
-		ItemInfo info;
+		ItemInfo info = {};
 
 		( (CBasePlayerWeapon *)pEntity )->m_pPlayer = pWeaponOwner;
 
 		( (CBasePlayerWeapon *)pEntity )->GetItemInfo( &info );
 
+		CBasePlayerItem::ItemInfoArray[info.iId] = info;
 		g_pWpns[info.iId] = (CBasePlayerWeapon *)pEntity;
 	}
 }
@@ -165,14 +166,16 @@ CBasePlayerWeapon::DefaultReload
 */
 BOOL CBasePlayerWeapon::DefaultReload( int iClipSize, int iAnim, float fDelay, int body )
 {
-	if( m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
+	if( m_fInReload || m_iPrimaryAmmoType < 0 || m_iPrimaryAmmoType >= MAX_AMMO_SLOTS ||
+		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] <= 0 )
 		return FALSE;
 
 	int j = Q_min( iClipSize - m_iClip, m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType] );
 
-	if( j == 0 )
+	if( j <= 0 )
 		return FALSE;
 
+	ItemInfoArray[m_iId].iMaxClip = iClipSize;
 	m_pPlayer->m_flNextAttack = UTIL_WeaponTimeBase() + fDelay;
 
 	//!!UNDONE -- reload sound goes here !!!
