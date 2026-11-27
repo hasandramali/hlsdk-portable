@@ -844,10 +844,20 @@ public:
 		}
 
 		if( m_iBeamState == 0 )
+		{
+			// client.dll 0x1009515b: the charge writes no refire delay, so the
+			// next command already fires the beam. A delay here swallowed the
+			// whole effect on cl_lw 1, where the server stops sending its own
+			// FEV_NOTHOST beam event and only the prediction can show it.
 			m_iBeamState = 1;
-		else
-			Playback( FLAGS_PREDICTED, m_usBeam, 0, 0, 0, 0, 0, 0 );
-		m_flNextSecondaryAttack = Now() + 0.2f;
+			return;
+		}
+
+		Playback( FLAGS_PREDICTED, m_usBeam, 0, 0, 0, 0, 0, 0 );
+
+		// client.dll 0x100950ed: out of ammo after the shot, drop the charge.
+		if( ReserveAmmo() <= 0 )
+			StopBeam();
 	}
 
 	void WeaponIdle( void )

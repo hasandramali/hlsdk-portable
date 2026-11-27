@@ -62,6 +62,8 @@ void CHudStatusBar::Reset( void )
 	for( i = 0; i < MAX_STATUSBAR_LINES; i++ )
 		m_szStatusText[i][0] = 0;
 	memset( m_iStatusValues, 0, sizeof m_iStatusValues );
+	memset( m_szStatusBar, 0, sizeof m_szStatusBar );
+	m_bReparseString = TRUE;
 
 	m_iStatusValues[0] = 1;  // 0 is the special index, which always returns true
 
@@ -87,6 +89,8 @@ void CHudStatusBar::ParseStatusString( int line_num )
 	{
 		while( *src == '\n' )
 			src++;  // skip over any newlines
+		if( !*src )
+			break;
 
 		if( ( ( src - src_start ) >= MAX_STATUSTEXT_LENGTH ) || ( ( dst - dst_start ) >= MAX_STATUSTEXT_LENGTH ) )
 			break;
@@ -103,7 +107,7 @@ void CHudStatusBar::ParseStatusString( int line_num )
 				continue; // no more left in this text line
 
 			// copy the text, char by char, until we hit a % or a \n
-			while( *src != '\n' && *src != 0 )
+			while( *src != '\n' && *src != 0 && ( dst - dst_start ) < MAX_STATUSTEXT_LENGTH - 1 )
 			{
 				if( *src != '%' )
 				{
@@ -115,6 +119,8 @@ void CHudStatusBar::ParseStatusString( int line_num )
 				{
 					// get the descriptor
 					char valtype = *(++src); // move over %
+					if( !valtype )
+						break;
 
 					// if it's a %, draw a % sign
 					if ( valtype == '%' )
@@ -138,6 +144,11 @@ void CHudStatusBar::ParseStatusString( int line_num )
 						switch( valtype )
 						{
 						case 'p':  // player name
+							if( indexval < 1 || indexval > MAX_PLAYERS )
+							{
+								szRepString[0] = 0;
+								break;
+							}
 							GetPlayerInfo( indexval, &g_PlayerInfoList[indexval] );
 							if( g_PlayerInfoList[indexval].name != NULL )
 							{
@@ -156,7 +167,7 @@ void CHudStatusBar::ParseStatusString( int line_num )
 							szRepString[0] = 0;
 						}
 
-						for( char *cp = szRepString; *cp != 0 && ( ( dst - dst_start ) < MAX_STATUSTEXT_LENGTH ); cp++, dst++ )
+						for( char *cp = szRepString; *cp != 0 && ( ( dst - dst_start ) < MAX_STATUSTEXT_LENGTH - 1 ); cp++, dst++ )
 							*dst = *cp;
 					}
 				}
@@ -168,7 +179,10 @@ void CHudStatusBar::ParseStatusString( int line_num )
 			while( *src != 0 && *src != '\n' )
 				src++;
 		}
+		if( ( dst - dst_start ) >= MAX_STATUSTEXT_LENGTH - 1 )
+			break;
 	}
+	*dst = 0;
 }
 
 int CHudStatusBar::Draw( float fTime )
@@ -233,7 +247,7 @@ int CHudStatusBar::MsgFunc_StatusText( const char *pszName, int iSize, void *pbu
 
 	strlcpy( m_szStatusText[line], READ_STRING(), MAX_STATUSTEXT_LENGTH );
 
-	if( m_szStatusText[0] == 0 )
+	if( !m_szStatusText[0][0] && !m_szStatusText[1][0] )
 		m_iFlags &= ~HUD_ACTIVE;
 	else
 		m_iFlags |= HUD_ACTIVE;  // we have status text, so turn on the status bar

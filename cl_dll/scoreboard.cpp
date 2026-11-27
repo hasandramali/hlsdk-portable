@@ -486,6 +486,9 @@ void CHudScoreboard::GetAllPlayersInfo( void )
 
 int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbuf )
 {
+	if( !pbuf || ( iSize != 20 && iSize != 22 ))
+		return 1;
+
 	m_iFlags |= HUD_ACTIVE;
 
 	BEGIN_READ( pbuf, iSize );
@@ -494,10 +497,24 @@ int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbu
 	int deaths = READ_LONG();
 	float health = READ_FLOAT();
 	float armor = READ_FLOAT();
-	short unk1 = READ_BYTE();
-	short unk2 = 0;
-	short playerclass = READ_SHORT();
-	short teamnumber = READ_SHORT();
+	short privilege = READ_BYTE();
+	short showPrivilege = 0;
+	short serverOperator = 0;
+	short playerclass;
+	short teamnumber;
+	if( iSize == 20 )
+	{
+		showPrivilege = READ_BYTE();
+		serverOperator = READ_BYTE();
+		playerclass = privilege;
+		teamnumber = privilege >= 16 && privilege <= 19 ? privilege - 15 : 0;
+	}
+	else
+	{
+		playerclass = READ_SHORT();
+		teamnumber = READ_SHORT();
+		privilege = 0;
+	}
 
 	if( cl > 0 && cl <= MAX_PLAYERS )
 	{
@@ -506,6 +523,9 @@ int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbu
 		g_PlayerExtraInfo[cl].deaths = deaths;
 		g_PlayerExtraInfo[cl].armor = armor;
 		g_PlayerExtraInfo[cl].playerclass = playerclass;
+		g_PlayerExtraInfo[cl].privilege = privilege;
+		g_PlayerExtraInfo[cl].showPrivilege = showPrivilege >= 1;
+		g_PlayerExtraInfo[cl].serverOperator = serverOperator;
 		g_PlayerExtraInfo[cl].teamnumber = teamnumber;
 
 #if USE_VGUI

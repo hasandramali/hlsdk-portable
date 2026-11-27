@@ -337,7 +337,10 @@ struct extra_player_info_t
 	char teamname[MAX_TEAM_NAME];
 	float health;
 	float armor;
-	char padding[4];
+	unsigned char privilege;
+	unsigned char showPrivilege;
+	unsigned char serverOperator;
+	char padding;
 };
 
 struct team_info_t

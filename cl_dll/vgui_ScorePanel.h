@@ -253,6 +253,7 @@ private:
 private:
 
 	Label			m_TitleLabel;
+	vgui::BitmapTGA *m_PrivilegeIcons[8];
 	Label*			m_pCurrentMapLabel;
 	Label*			m_pNextMapLabel;
 	Label*			m_pTimeleftLabel;
@@ -295,6 +296,7 @@ public:
 public:
 
 	ScorePanel(int x,int y,int wide,int tall);
+	~ScorePanel();
 
 	void Update( void );
 

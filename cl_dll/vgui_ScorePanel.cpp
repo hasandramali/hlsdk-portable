@@ -115,6 +115,13 @@ ScorePanel::ScorePanel( int x, int y, int wide, int tall ) : Panel( x, y, wide, 
 	setBgColor( 0, 0, 0, 96 );
 	m_pCurrentHighlightLabel = NULL;
 	m_iHighlightRow = -1;
+	const char *iconNames[8] = { "1donor", "2donor", "3donor", "4contributor", "5artist", "6developer", "server_admin", "server_owner" };
+	for( int index = 0; index < 8; index++ )
+	{
+		char path[128];
+		snprintf( path, sizeof( path ), "gfx/icons/%s.tga", iconNames[index] );
+		m_PrivilegeIcons[index] = vgui_LoadTGA( path );
+	}
 
 	//m_pTrackerIcon = vgui_LoadTGANoInvertAlpha("gfx/vgui/640_scoreboardtracker.tga");
 
@@ -253,6 +260,12 @@ ScorePanel::ScorePanel( int x, int y, int wide, int tall ) : Panel( x, y, wide, 
 //-----------------------------------------------------------------------------
 // Purpose: Called each time a new level is started.
 //-----------------------------------------------------------------------------
+ScorePanel::~ScorePanel()
+{
+	for( int index = 0; index < 8; index++ )
+		delete m_PrivilegeIcons[index];
+}
+
 void ScorePanel::Initialize( void )
 {
 	// Clear out scoreboard data
@@ -713,12 +726,8 @@ void ScorePanel::FillGrid()
 				// Set background color
 				if ( pl_info->thisplayer ) // if it is their name, draw it a different color
 				{
-					// Highlight this player
 					pLabel->setFgColor(Scheme::sc_white);
-					pLabel->setBgColor(	iTeamColors[ g_PlayerExtraInfo[ m_iSortedRows[row] ].teamnumber % iNumberOfTeamColors ][0],
-										iTeamColors[ g_PlayerExtraInfo[ m_iSortedRows[row] ].teamnumber % iNumberOfTeamColors ][1],
-										iTeamColors[ g_PlayerExtraInfo[ m_iSortedRows[row] ].teamnumber % iNumberOfTeamColors ][2],
-										196 );
+					pLabel->setBgColor( 101, 128, 152, 180 );
 				}
 				else if ( m_iSortedRows[row] == m_iLastKilledBy && m_fLastKillTime && m_fLastKillTime > gHUD.m_flTime )
 				{
@@ -802,7 +811,11 @@ void ScorePanel::FillGrid()
 				case COLUMN_PRIVILEGE:
 					pLabel->setFgColor(255, 255, 255, 0);
 
-					// TODO: Implement
+					{
+						const extra_player_info_t &extra = g_PlayerExtraInfo[m_iSortedRows[row]];
+						if( extra.showPrivilege && extra.privilege >= 1 && extra.privilege <= 6 )
+							pLabel->setImage( m_PrivilegeIcons[extra.privilege - 1] );
+					}
 					break;
 
 				case COLUMN_NAME:
@@ -950,7 +963,11 @@ void ScorePanel::FillGrid()
 				case COLUMN_SERVEROP:
 					pLabel->setFgColor(255, 255, 255, 0);
 
-					// TODO: Implement
+					{
+						unsigned char role = g_PlayerExtraInfo[m_iSortedRows[row]].serverOperator;
+						if( role )
+							pLabel->setImage( m_PrivilegeIcons[role == 1 ? 6 : 7] );
+					}
 					break;
 
 				default:

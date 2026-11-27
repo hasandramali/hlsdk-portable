@@ -15,6 +15,7 @@
 #include "const.h"
 #include "entity_types.h"
 #include "studio_event.h" // def. of mstudioevent_t
+#include "com_model.h"    // full model_t, model name lookup
 #include "r_efx.h"
 #include "event_api.h"
 #include "pm_defs.h"
@@ -759,21 +760,53 @@ The entity's studio model description indicated an event was
 fired during this frame, handle the event by it's tag ( e.g., muzzleflash, sound )
 =========================
 */
+/*
+=================
+CL_StudioMuzzleFlashScale
+
+R_MuzzleFlash packs the sprite scale into its type argument:
+scale = ( type / 10 ) * 0.1, sprite = type % 10, and 0..9 means the
+engine's default 0.5 scale. The minigun's flash is drawn at the muzzle
+right in front of the camera and blanks out most of the view while it
+fires, so halve the scale for it and keep the sprite index intact.
+=================
+*/
+static int CL_StudioMuzzleFlashScale( const struct cl_entity_s *entity, int type )
+{
+	int	index, scale;
+
+	if( !entity || !entity->model || !entity->model->name[0] )
+		return type;
+
+	if( !strstr( entity->model->name, "minigun" ))
+		return type;
+
+	index = type % 10;
+	scale = type / 10;
+
+	if( scale <= 0 ) scale = 5; // engine default (0.5) for types 0..9
+	scale = ( scale + 1 ) / 2;
+
+	return index + scale * 10;
+}
+
 void DLLEXPORT HUD_StudioEvent( const struct mstudioevent_s *event, const struct cl_entity_s *entity )
 {
+	const int	flash = CL_StudioMuzzleFlashScale( entity, atoi( event->options ));
+
 	switch( event->event )
 	{
 	case 5001:
-		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[0], atoi( event->options ) );
+		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[0], flash );
 		break;
 	case 5011:
-		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[1], atoi( event->options ) );
+		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[1], flash );
 		break;
 	case 5021:
-		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[2], atoi( event->options ) );
+		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[2], flash );
 		break;
 	case 5031:
-		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[3], atoi( event->options ) );
+		gEngfuncs.pEfxAPI->R_MuzzleFlash( (float *)&entity->attachment[3], flash );
 		break;
 	case 5002:
 		gEngfuncs.pEfxAPI->R_SparkEffect( (float *)&entity->attachment[0], atoi( event->options ), -100, 100 );
