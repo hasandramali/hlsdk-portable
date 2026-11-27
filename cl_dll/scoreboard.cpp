@@ -497,23 +497,20 @@ int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbu
 	int deaths = READ_LONG();
 	float health = READ_FLOAT();
 	float armor = READ_FLOAT();
-	short privilege = READ_BYTE();
+	short playerclass = READ_BYTE();
 	short showPrivilege = 0;
 	short serverOperator = 0;
-	short playerclass;
 	short teamnumber;
 	if( iSize == 20 )
 	{
 		showPrivilege = READ_BYTE();
 		serverOperator = READ_BYTE();
-		playerclass = privilege;
-		teamnumber = privilege >= 16 && privilege <= 19 ? privilege - 15 : 0;
+		teamnumber = playerclass >= 16 && playerclass <= 19 ? playerclass - 15 : 0;
 	}
 	else
 	{
 		playerclass = READ_SHORT();
 		teamnumber = READ_SHORT();
-		privilege = 0;
 	}
 
 	if( cl > 0 && cl <= MAX_PLAYERS )
@@ -523,7 +520,8 @@ int CHudScoreboard::MsgFunc_ScoreInfo( const char *pszName, int iSize, void *pbu
 		g_PlayerExtraInfo[cl].deaths = deaths;
 		g_PlayerExtraInfo[cl].armor = armor;
 		g_PlayerExtraInfo[cl].playerclass = playerclass;
-		g_PlayerExtraInfo[cl].privilege = privilege;
+		if( iSize == 22 )
+			g_PlayerExtraInfo[cl].privilege = 0;
 		g_PlayerExtraInfo[cl].showPrivilege = showPrivilege >= 1;
 		g_PlayerExtraInfo[cl].serverOperator = serverOperator;
 		g_PlayerExtraInfo[cl].teamnumber = teamnumber;

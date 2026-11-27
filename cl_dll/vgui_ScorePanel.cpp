@@ -727,7 +727,7 @@ void ScorePanel::FillGrid()
 				if ( pl_info->thisplayer ) // if it is their name, draw it a different color
 				{
 					pLabel->setFgColor(Scheme::sc_white);
-					pLabel->setBgColor( 101, 128, 152, 180 );
+					pLabel->setBgColor( 101, 128, 152, 212 );
 				}
 				else if ( m_iSortedRows[row] == m_iLastKilledBy && m_fLastKillTime && m_fLastKillTime > gHUD.m_flTime )
 				{
