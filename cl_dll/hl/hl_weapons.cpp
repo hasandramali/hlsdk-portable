@@ -50,6 +50,11 @@ static CBasePlayerWeapon *g_pWpns[MAX_WEAPONS];
 static int s_bEventsBound = 0;
 
 int g_bSvenLocalWeapons = 0;
+bool HUD_IsPredictedWeaponReloading( void )
+{
+	return g_bSvenLocalWeapons && cl_lw && cl_lw->value && player.m_pActiveItem &&
+		((CBasePlayerWeapon *)player.m_pActiveItem)->m_fInReload;
+}
 int HUD_WeaponSecondaryAmmoType( int id );
 int HUD_WeaponPrimaryAmmoType( int id );
 int HUD_AmmoCount( int type );
@@ -772,6 +777,7 @@ static void SvenDecodeWeaponData( int id, CBasePlayerWeapon *weapon, const weapo
 		break;
 	case WEAPON_MP5:
 	{
+		CBasePlayerItem::ItemInfoArray[id].iMaxClip = HUD_IsClassicMode() ? MP5_MAX_CLIP : 30;
 		const int type = HUD_WeaponSecondaryAmmoType( id );
 		if( SvenValidAmmo( type ))
 		{

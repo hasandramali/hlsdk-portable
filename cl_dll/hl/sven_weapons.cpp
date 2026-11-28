@@ -810,7 +810,7 @@ public:
 
 class CSvenShockRifle : public CSvenWeapon
 {
-	enum { ANIM_IDLE = 0, ANIM_DRAW = 2, ANIM_IDLE_ALT = 4 };
+	enum { ANIM_IDLE = 0, ANIM_FIRE = 1, ANIM_DRAW = 2, ANIM_IDLE_ALT = 4 };
 	unsigned short m_usFire, m_usBeam;
 	int m_iBeamState;
 
@@ -823,13 +823,19 @@ class CSvenShockRifle : public CSvenWeapon
 public:
 	CSvenShockRifle() : m_iBeamState( 0 ) {}
 	int Id( void ) { return 28; }
+	void Decode( const weapon_data_t *data ) { m_iBeamState = data->m_fInSpecialReload != 0; }
+	void Encode( weapon_data_t *data ) { data->m_fInSpecialReload = m_iBeamState; }
 	void Precache( void )
 	{
 		CSvenWeapon::Precache();
 		m_usFire = PRECACHE_EVENT( 1, "events/shockrifle.sc" );
 		m_usBeam = PRECACHE_EVENT( 1, "events/shockriflebeam.sc" );
 	}
-	BOOL Deploy( void ) { return DefaultDeploy( "models/v_shock.mdl", "models/p_shock.mdl", ANIM_DRAW, "bow" ); }
+	BOOL Deploy( void )
+	{
+		m_iBeamState = 0;
+		return DefaultDeploy( "models/v_shock.mdl", "models/p_shock.mdl", ANIM_DRAW, "bow" );
+	}
 
 	void Holster( int skiplocal )
 	{
@@ -851,6 +857,7 @@ public:
 		}
 
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
+		SendWeaponAnim( ANIM_FIRE );
 		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, 0, 0, 0, 0 );
 		m_flNextPrimaryAttack = Now() + 0.2f;
 		SetIdleDelay( 10, 15 );
@@ -867,7 +874,7 @@ public:
 			return;
 		}
 
-		if( m_iBeamState == 0 )
+		if( m_iBeamState == 0 && !( m_pPlayer->m_afButtonLast & IN_ATTACK2 ))
 		{
 			// client.dll 0x1009515b: the charge writes no refire delay, so the
 			// next command already fires the beam. A delay here swallowed the
@@ -877,6 +884,7 @@ public:
 			return;
 		}
 
+		m_iBeamState = 1;
 		Playback( FLAGS_PREDICTED, m_usBeam, 0, 0, 0, 0, 0, 0 );
 
 		// client.dll 0x100950ed: out of ammo after the shot, drop the charge.

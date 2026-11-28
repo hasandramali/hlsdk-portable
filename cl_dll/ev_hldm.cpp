@@ -30,6 +30,13 @@
 #include "event_api.h"
 #include "event_args.h"
 #include "in_defs.h"
+#include "com_weapons.h"
+
+static void EV_ReloadSafeWeaponAnimation( int sequence, int body )
+{
+	if( !HUD_IsPredictedWeaponReloading() )
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( sequence, body );
+}
 
 #include <string.h>
 
@@ -506,7 +513,7 @@ static void EV_FireGlock_Impl( event_args_t *args )
 	if( EV_IsLocal( idx ) )
 	{
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( empty ? GLOCK_SHOOT_EMPTY : GLOCK_SHOOT, 0 );
+		EV_ReloadSafeWeaponAnimation( empty ? GLOCK_SHOOT_EMPTY : GLOCK_SHOOT, 0 );
 
 		V_PunchAxis( 0, -2.0 );
 	}
@@ -680,7 +687,7 @@ void EV_FireMP5( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( MP5_FIRE1 + gEngfuncs.pfnRandomLong( 0, 2 ), 0 );
+		EV_ReloadSafeWeaponAnimation( MP5_FIRE1 + gEngfuncs.pfnRandomLong( 0, 2 ), 0 );
 
 		V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
 	}
@@ -764,7 +771,7 @@ void EV_FirePython( event_args_t *args )
 
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( PYTHON_FIRE1, multiplayer ? 1 : 0 );
+		EV_ReloadSafeWeaponAnimation( PYTHON_FIRE1, multiplayer ? 1 : 0 );
 
 		V_PunchAxis( 0, -10.0 );
 	}
@@ -1917,7 +1924,7 @@ void EV_FireEagle( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( ( args->bparam1 != 0 ) ? 6 : 5, 2 );
+		EV_ReloadSafeWeaponAnimation( ( args->bparam1 != 0 ) ? 6 : 5, 2 );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 18, -18, 12 );
@@ -2052,7 +2059,7 @@ void EV_FireM249( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( M249_SHOOT1 + gEngfuncs.pfnRandomLong( 0, 2 ), args->iparam2 );
+		EV_ReloadSafeWeaponAnimation( M249_SHOOT1 + gEngfuncs.pfnRandomLong( 0, 2 ), args->iparam2 );
 	}
 
 	EV_GetDefaultShellInfo( args, origin, velocity, ShellVelocity, ShellOrigin, forward, right, up, 20, -12, 4 );
@@ -2274,69 +2281,33 @@ void EV_ShockBeam( event_args_t *args )
 
 void EV_ShockFire( event_args_t *args )
 {
-	int idx;
-	vec3_t origin;
-
-	idx = args->entindex;
-
-	VectorCopy( args->origin, origin );
-
-	int fPlayEffects = args->iparam1;
-
-	// Primary attack.
-	if( !fPlayEffects )
+	const int playerIndex = args->entindex;
+	if( EV_IsLocal( playerIndex ) )
 	{
-		//Only play the weapon anims if I shot it.
-		if( EV_IsLocal( idx ) )
-		{
-			V_PunchAxis( 0, gEngfuncs.pfnRandomLong( 0, 2 ) );
+		if( !g_bSvenLocalWeapons || !cl_lw || !cl_lw->value )
 			gEngfuncs.pEventAPI->EV_WeaponAnimation( SHOCK_FIRE, 0 );
-		}
-
-		// Play fire sound.
-		gEngfuncs.pEventAPI->EV_PlaySound( idx, origin, CHAN_WEAPON, "weapons/shock_fire.wav", 1, ATTN_NORM, 0, 100 );
-	}
-	else // Play weapon effects.
-	{
-		int iBeamModelIndex = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/lgtning.spr" );
-
-		cl_entity_t *vm = gEngfuncs.GetViewModel();
-		if( vm )
+		const int modelIndex = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/lgtning.spr" );
+		if( modelIndex > 0 )
 		{
-			// Valid viewmodel.
-
-			gEngfuncs.pEventAPI->EV_SetUpPlayerPrediction( false, true );
-
-			// Store off the old count
-			gEngfuncs.pEventAPI->EV_PushPMStates();
-
-			for( int i = 1; i < 4; i++ )
+			for( int attachment = 2; attachment <= 4; attachment++ )
 			{
-				BEAM *pBeam = gEngfuncs.pEfxAPI->R_BeamPoints(
-					(float*)&vm->attachment[0],
-					(float*)&vm->attachment[i],
-					iBeamModelIndex,
-					0.01f,
-					1.1f,
-					0.3f,
-					230 + gEngfuncs.pfnRandomFloat( 20, 30 ),
-					10,
-					0,
-					10,
-					0.0f,
-					1.0f,
-					1.0f );
-
-				if( pBeam )
-				{
-					pBeam->flags |= ( FBEAM_SHADEIN | FBEAM_SHADEOUT );
-					pBeam->startEntity = vm->index;
-					pBeam->endEntity = vm->index;
-				}
+				gEngfuncs.pEfxAPI->R_BeamEnts( playerIndex | ( 1 << 12 ),
+					playerIndex | ( attachment << 12 ), modelIndex,
+					0.1f, 1.0f, 0.5f, 1.0f, 0.0f, 0, 0.0f, 96.0f / 255.0f, 180.0f / 255.0f, 1.0f );
 			}
-
-			gEngfuncs.pEventAPI->EV_PopPMStates();
 		}
+	}
+	gEngfuncs.pEventAPI->EV_PlaySound( playerIndex, args->origin, CHAN_WEAPON,
+		"weapons/shock_fire.wav", 1.0f, ATTN_NORM, 0, 100 );
+	dlight_t *light = gEngfuncs.pEfxAPI->CL_AllocDlight( 0 );
+	if( light )
+	{
+		VectorCopy( args->origin, light->origin );
+		light->color.r = 85;
+		light->color.g = 200;
+		light->color.b = 255;
+		light->radius = light->minlight = 24.0f;
+		light->die = gEngfuncs.GetClientTime() + 0.2f;
 	}
 }
 //======================
@@ -2591,7 +2562,7 @@ void EV_FireUzi( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( UZI_SHOOT, 0 );
+		EV_ReloadSafeWeaponAnimation( UZI_SHOOT, 0 );
 
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
@@ -2654,7 +2625,7 @@ void EV_FireUziakimbo( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( args->iparam1, 2 );
+		EV_ReloadSafeWeaponAnimation( args->iparam1, 2 );
 
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
@@ -2728,7 +2699,7 @@ void EV_FireM16A2( event_args_t *args )
 	{
 		// Add muzzle flash to current weapon model
 		EV_MuzzleFlash();
-		gEngfuncs.pEventAPI->EV_WeaponAnimation( M16A2_FIRE1 + gEngfuncs.pfnRandomLong( 0, 1 ), 0 );
+		EV_ReloadSafeWeaponAnimation( M16A2_FIRE1 + gEngfuncs.pfnRandomLong( 0, 1 ), 0 );
 
 		if( cl_wpn_punchangles && cl_wpn_punchangles->value )
 			V_PunchAxis( 0, gEngfuncs.pfnRandomFloat( -2, 2 ) );
