@@ -2284,8 +2284,7 @@ void EV_ShockFire( event_args_t *args )
 	const int playerIndex = args->entindex;
 	if( EV_IsLocal( playerIndex ) )
 	{
-		if( !g_bSvenLocalWeapons || !cl_lw || !cl_lw->value )
-			gEngfuncs.pEventAPI->EV_WeaponAnimation( SHOCK_FIRE, 0 );
+		gEngfuncs.pEventAPI->EV_WeaponAnimation( SHOCK_FIRE, 0 );
 		const int modelIndex = gEngfuncs.pEventAPI->EV_FindModelIndex( "sprites/lgtning.spr" );
 		if( modelIndex > 0 )
 		{

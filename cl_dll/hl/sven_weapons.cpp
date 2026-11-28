@@ -810,7 +810,7 @@ public:
 
 class CSvenShockRifle : public CSvenWeapon
 {
-	enum { ANIM_IDLE = 0, ANIM_FIRE = 1, ANIM_DRAW = 2, ANIM_IDLE_ALT = 4 };
+	enum { ANIM_IDLE = 0, ANIM_DRAW = 2, ANIM_IDLE_ALT = 4 };
 	unsigned short m_usFire, m_usBeam;
 	int m_iBeamState;
 
@@ -857,7 +857,6 @@ public:
 		}
 
 		m_pPlayer->m_rgAmmo[m_iPrimaryAmmoType]--;
-		SendWeaponAnim( ANIM_FIRE );
 		Playback( FLAGS_PREDICTED, m_usFire, 0, 0, 0, 0, 0, 0 );
 		m_flNextPrimaryAttack = Now() + 0.2f;
 		SetIdleDelay( 10, 15 );
